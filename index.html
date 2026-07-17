@@ -425,70 +425,109 @@ function tplUpload(){
   const loaded = state.data.length>0;
   return `
     <h1 class="page-title">Importar Master de Pendências</h1>
-    <p class="page-sub">Envie o arquivo Excel (.xlsx) com o cabeçalho na 4ª linha.</p>
+    <p class="page-sub">Arraste qualquer um dos arquivos (Cliente Final ou Fábrica) — o sistema identifica sozinho qual é qual.</p>
     <div class="upload-zone" id="dropzone" ondragover="event.preventDefault();this.classList.add('drag')"
       ondragleave="this.classList.remove('drag')"
-      ondrop="handleDrop(event)">
+      ondrop="handleDropAny(event, 'uploadMsg')">
       <div class="icon">📄</div>
       <h2>${loaded ? 'Arquivo carregado com sucesso' : 'Arraste o arquivo aqui'}</h2>
       <p>${loaded ? state.data.length + ' NFs importadas — pode importar outro arquivo para substituir os dados.' : 'ou clique no botão abaixo para selecionar (.xlsx)'}</p>
-      <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(event.target.files[0])">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFileAny(event.target.files[0], 'uploadMsg')">
       <button class="btn btn-yellow" onclick="document.getElementById('fileInput').click()">Selecionar arquivo Excel</button>
       <div id="uploadMsg" style="margin-top:14px;font-size:13px;color:var(--muted);"></div>
     </div>
     ${loaded ? `<div style="max-width:640px;margin:0 auto;"><button class="btn btn-outline" onclick="navigate('dashboard')">Ir para o Dashboard →</button></div>` : ''}
   `;
 }
-function handleDrop(e){
+function handleDropAny(e, msgId){
   e.preventDefault();
   e.currentTarget.classList.remove('drag');
   const file = e.dataTransfer.files[0];
-  if(file) handleFile(file);
+  if(file) handleFileAny(file, msgId);
 }
-function handleFile(file){
+/* Detecta automaticamente se o arquivo é da base Cliente Final (Pasta5) ou da base Fábrica
+   (Entregas entre Empresas) e carrega no lugar certo. */
+function handleFileAny(file, msgId){
   if(!file) return;
-  const msg = ()=>document.getElementById('uploadMsg');
+  const msg = ()=>document.getElementById(msgId) || document.getElementById('uploadMsg') || document.getElementById('uploadMsgFabrica');
   const reader = new FileReader();
   reader.onload = function(e){
     try{
-      const wb = XLSX.read(e.target.result, {type:'array'});
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      // linha 4 (índice 3) é o cabeçalho -> range começa em 3
-      const rows = XLSX.utils.sheet_to_json(sheet, {range:3, defval:null});
-      const parsed = rows.filter(r => r['Nº NF']!==null && r['Nº NF']!==undefined && r['Nº NF']!=='').map(r=>({
-        mes: r['MÊS'] ?? '',
-        trim: r['TRIM.'] ?? '',
-        nf: r['Nº NF'] ?? '',
-        empresa: r['EMPRESA'] ?? '',
-        parceiro: r['PARCEIRO'] ?? '',
-        cidade: r['CIDADE'] ?? '',
-        uf: r['UF'] ?? '',
-        tipo: r['TIPO'] ?? '',
-        transportadora: r['TRANSPORTADORA'] ?? '',
-        fat: (typeof r['FAT. (R$)']==='number') ? r['FAT. (R$)'] : parseBRNumber(r['FAT. (R$)']),
-        frete: (typeof r['FRETE (R$)']==='number') ? r['FRETE (R$)'] : parseBRNumber(r['FRETE (R$)']),
-        status: r['STATUS'] ?? '',
-        pendencia: r['PENDÊNCIA'] ?? '',
-        regiao: r['REGIÃO'] ?? '',
-      }));
-      if(parsed.length===0){
-        if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma linha de dados encontrada. Verifique o layout do arquivo.</span>';
-        return;
+      const rawRows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+
+      // assinatura Cliente Final: alguma das primeiras linhas tem 'Nº NF' como cabeçalho
+      let clienteHeaderRow = -1;
+      for(let r=0; r<Math.min(rawRows.length,10); r++){
+        if((rawRows[r]||[]).some(c => c==='Nº NF')) { clienteHeaderRow = r; break; }
       }
-      const totalBruto = parsed.length;
-      const dataFiltrada = parsed.filter(r => ALLOWED_TIPOS.includes(r.tipo));
-      const excluidos = totalBruto - dataFiltrada.length;
-      state.data = dataFiltrada;
-      resetFilters();
-      if(msg()) msg().innerHTML = `<span style="color:var(--ok)">${dataFiltrada.length} NFs carregadas com sucesso!</span> <span style="color:var(--muted)">(${excluidos} registros de Transferência/Devolução foram desconsiderados da análise — só entram Venda e Bonificação)</span>`;
-      renderNav();
-      navigate('dashboard');
+      // assinatura Fábrica: 'Cod. Rolling' aparece em algum lugar do arquivo
+      const isFabrica = rawRows.some(row => (row||[]).some(c => c==='Cod. Rolling'));
+
+      if(clienteHeaderRow >= 0){
+        carregarArquivoCliente(sheet, clienteHeaderRow, msg);
+      } else if(isFabrica){
+        carregarArquivoFabrica(rawRows, msg);
+      } else {
+        if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Não reconheci o formato deste arquivo. Verifique se é o Master de Pendências ou o arquivo de Entregas entre Empresas.</span>';
+      }
     }catch(err){
       console.error(err);
       if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Erro ao ler o arquivo: '+err.message+'</span>';
     }
   };
   reader.readAsArrayBuffer(file);
+}
+function carregarArquivoCliente(sheet, headerRowIdx, msg){
+  const rows = XLSX.utils.sheet_to_json(sheet, {range:headerRowIdx, defval:null});
+  const parsed = rows.filter(r => r['Nº NF']!==null && r['Nº NF']!==undefined && r['Nº NF']!=='').map(r=>({
+    mes: r['MÊS'] ?? '',
+    trim: r['TRIM.'] ?? '',
+    nf: r['Nº NF'] ?? '',
+    empresa: r['EMPRESA'] ?? '',
+    parceiro: r['PARCEIRO'] ?? '',
+    cidade: r['CIDADE'] ?? '',
+    uf: r['UF'] ?? '',
+    tipo: r['TIPO'] ?? '',
+    transportadora: r['TRANSPORTADORA'] ?? '',
+    fat: (typeof r['FAT. (R$)']==='number') ? r['FAT. (R$)'] : parseBRNumber(r['FAT. (R$)']),
+    frete: (typeof r['FRETE (R$)']==='number') ? r['FRETE (R$)'] : parseBRNumber(r['FRETE (R$)']),
+    status: r['STATUS'] ?? '',
+    pendencia: r['PENDÊNCIA'] ?? '',
+    regiao: r['REGIÃO'] ?? '',
+  }));
+  if(parsed.length===0){
+    if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma linha de dados encontrada. Verifique o layout do arquivo.</span>';
+    return;
+  }
+  const totalBruto = parsed.length;
+  const dataFiltrada = parsed.filter(r => ALLOWED_TIPOS.includes(r.tipo));
+  const excluidos = totalBruto - dataFiltrada.length;
+  state.data = dataFiltrada;
+  resetFilters();
+  if(msg()) msg().innerHTML = `<span style="color:var(--ok)">Reconhecido: base Cliente Final. ${dataFiltrada.length} NFs carregadas!</span> <span style="color:var(--muted)">(${excluidos} registros de Transferência/Devolução foram desconsiderados — só entram Venda e Bonificação)</span>`;
+  state.mode = 'cliente';
+  renderNav();
+  navigate('dashboard');
+}
+function carregarArquivoFabrica(rawRows, msg){
+  const todas = parseFabricaSheet(rawRows);
+  const semFrete = todas.filter(en => typeof en.frete !== 'number').length;
+  const transferencias = todas.filter(en => en.isTransferencia && typeof en.frete === 'number').length;
+  const validas = todas.filter(en => typeof en.frete === 'number' && !en.isTransferencia);
+  if(validas.length===0){
+    if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma entrega com Valor de Frete encontrada. Verifique o arquivo.</span>';
+    return;
+  }
+  state.fabrica.data = validas;
+  state.fabrica.master = { search:'', mes:'', transportadora:'', page:1, pageSize:25 };
+  state.fabrica.entregaSelecionada = null;
+  state.fabrica.mes = { selected:null };
+  if(msg()) msg().innerHTML = `<span style="color:var(--ok)">Reconhecido: base Fábrica. ${validas.length} entregas carregadas!</span> <span style="color:var(--muted)">(${semFrete} entregas antigas sem Frete e ${transferencias} de Transferência foram desconsideradas)</span>`;
+  state.mode = 'fabrica';
+  renderNav();
+  navigate('dashboardFabrica');
 }
 function parseBRNumber(v){
   if(v===null || v===undefined || v==='') return null;
@@ -1098,61 +1137,23 @@ function parseFabricaSheet(rows){
   return entregas;
 }
 
-function handleFileFabrica(file){
-  if(!file) return;
-  const msg = ()=>document.getElementById('uploadMsgFabrica');
-  const reader = new FileReader();
-  reader.onload = function(e){
-    try{
-      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
-      const todas = parseFabricaSheet(rows);
-      const semFrete = todas.filter(en => typeof en.frete !== 'number').length;
-      const transferencias = todas.filter(en => en.isTransferencia && typeof en.frete === 'number').length;
-      const validas = todas.filter(en => typeof en.frete === 'number' && !en.isTransferencia);
-      if(validas.length===0){
-        if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma entrega com Valor de Frete encontrada. Verifique o arquivo.</span>';
-        return;
-      }
-      state.fabrica.data = validas;
-      state.fabrica.master = { search:'', mes:'', transportadora:'', page:1, pageSize:25 };
-      state.fabrica.entregaSelecionada = null;
-      state.fabrica.mes = { selected:null };
-      if(msg()) msg().innerHTML = `<span style="color:var(--ok)">${validas.length} entregas carregadas com sucesso!</span> <span style="color:var(--muted)">(${semFrete} entregas antigas sem Frete e ${transferencias} de Transferência foram desconsideradas)</span>`;
-      renderNav();
-      navigate('dashboardFabrica');
-    }catch(err){
-      console.error(err);
-      if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Erro ao ler o arquivo: '+err.message+'</span>';
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
 function tplUploadFabrica(){
   const loaded = state.fabrica.data.length>0;
   return `
     <h1 class="page-title">Importar Entregas entre Empresas (Fábrica → RCS ES)</h1>
-    <p class="page-sub">Envie o arquivo Excel de remessas da fábrica (Rolling Papers). Só entram entregas de 2026 com Frete preenchido.</p>
+    <p class="page-sub">Arraste qualquer um dos arquivos (Cliente Final ou Fábrica) — o sistema identifica sozinho qual é qual. Só entram entregas de 2026 com Frete preenchido.</p>
     <div class="upload-zone" id="dropzoneFabrica" ondragover="event.preventDefault();this.classList.add('drag')"
       ondragleave="this.classList.remove('drag')"
-      ondrop="handleDropFabrica(event)">
+      ondrop="handleDropAny(event, 'uploadMsgFabrica')">
       <div class="icon">🏭</div>
       <h2>${loaded ? 'Arquivo carregado com sucesso' : 'Arraste o arquivo aqui'}</h2>
       <p>${loaded ? state.fabrica.data.length + ' entregas importadas — pode importar outro arquivo para substituir os dados.' : 'ou clique no botão abaixo para selecionar (.xlsx)'}</p>
-      <input type="file" id="fileInputFabrica" accept=".xlsx,.xls" style="display:none" onchange="handleFileFabrica(event.target.files[0])">
+      <input type="file" id="fileInputFabrica" accept=".xlsx,.xls" style="display:none" onchange="handleFileAny(event.target.files[0], 'uploadMsgFabrica')">
       <button class="btn btn-yellow" onclick="document.getElementById('fileInputFabrica').click()">Selecionar arquivo Excel</button>
       <div id="uploadMsgFabrica" style="margin-top:14px;font-size:13px;color:var(--muted);"></div>
     </div>
     ${loaded ? `<div style="max-width:640px;margin:0 auto;"><button class="btn btn-outline" onclick="navigate('dashboardFabrica')">Ir para o Dashboard →</button></div>` : ''}
   `;
-}
-function handleDropFabrica(e){
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag');
-  const file = e.dataTransfer.files[0];
-  if(file) handleFileFabrica(file);
 }
 
 function groupByTransportadoraFabrica(data){
