@@ -1,925 +1,847 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Papelito — Faturamento × Frete</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Papelito | Faturamento × Frete</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,sans-serif;background:#F0F0F0;color:#1A1A1A;min-height:100vh}
+:root{
+  --black:#1A1A1A;
+  --black-soft:#262626;
+  --yellow:#FFD600;
+  --yellow-dark:#E6C200;
+  --bg:#F5F5F3;
+  --card:#FFFFFF;
+  --border:#E5E5E0;
+  --text:#1A1A1A;
+  --muted:#767671;
+  --ok:#1E8E3E;
+  --warn:#C77700;
+  --danger:#C0392B;
+  --info:#2563EB;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+#app{display:flex;min-height:100vh;}
 
-/* NAV */
-.nav{background:#1A1A1A;padding:0 24px;display:flex;align-items:center;height:52px;position:sticky;top:0;z-index:100;gap:4px}
-.nav-logo{color:#FFD600;font-weight:900;font-size:15px;letter-spacing:3px;margin-right:16px;flex-shrink:0}
-.nav-btn{background:none;border:none;color:#888;font-size:12px;font-weight:500;padding:6px 12px;border-radius:4px;cursor:pointer;transition:all .15s;white-space:nowrap}
-.nav-btn:hover{color:#FFD600}
-.nav-btn.active{background:#FFD600;color:#1A1A1A;font-weight:700}
-.nav-sep{flex:1}
-.nav-upload{background:#FFD600;color:#1A1A1A;border:none;border-radius:4px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px}
-.nav-upload:hover{background:#FBC02D}
-.nav-file-name{color:#666;font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* SIDEBAR */
+#sidebar{
+  width:250px;
+  min-width:250px;
+  background:var(--black);
+  color:#fff;
+  display:flex;
+  flex-direction:column;
+  position:sticky;
+  top:0;
+  height:100vh;
+  overflow-y:auto;
+}
+#sidebar .logo{
+  padding:24px 20px 16px 20px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  border-bottom:1px solid #333;
+}
+#sidebar .logo .dot{
+  width:14px;height:14px;border-radius:3px;background:var(--yellow);
+}
+#sidebar .logo .title{font-weight:800;font-size:17px;letter-spacing:.3px;}
+#sidebar .logo .sub{font-size:11px;color:#999;margin-top:2px;}
+#sidebar nav{padding:14px 10px;flex:1;}
+.nav-btn{
+  display:flex;align-items:center;gap:10px;
+  width:100%;text-align:left;
+  background:transparent;border:none;color:#ccc;
+  padding:11px 12px;border-radius:8px;font-size:13.5px;font-weight:600;
+  cursor:pointer;margin-bottom:2px;transition:.15s;
+}
+.nav-btn:hover{background:#2c2c2c;color:#fff;}
+.nav-btn.active{background:var(--yellow);color:var(--black);}
+.nav-btn[disabled]{opacity:.35;cursor:not-allowed;}
+.nav-btn .n{
+  width:20px;height:20px;border-radius:5px;background:#333;color:#ccc;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none;
+}
+.nav-btn.active .n{background:var(--black);color:var(--yellow);}
+#sidebar .footer{padding:14px 20px;font-size:10.5px;color:#666;border-top:1px solid #333;}
 
-/* PAGES */
-.page{display:none;padding:20px 24px;max-width:1500px;margin:0 auto}
-.page.active{display:block}
+/* CONTENT */
+#content{flex:1;padding:28px 32px;max-width:100%;overflow-x:hidden;}
+.page-title{font-size:22px;font-weight:800;margin:0 0 4px 0;}
+.page-sub{color:var(--muted);font-size:13.5px;margin:0 0 22px 0;}
 
-/* UPLOAD INICIAL */
-#page-upload{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 52px);padding:24px}
-#page-upload.hidden{display:none}
-.upload-hero{background:#fff;border:2px dashed #FFD600;border-radius:12px;padding:64px 48px;text-align:center;max-width:520px;width:100%}
-.upload-hero .icon{font-size:56px;margin-bottom:20px}
-.upload-hero h2{font-size:22px;font-weight:700;margin-bottom:8px}
-.upload-hero p{color:#666;font-size:14px;margin-bottom:24px;line-height:1.5}
-.btn-hero{background:#FFD600;color:#1A1A1A;border:none;border-radius:6px;padding:13px 32px;font-size:14px;font-weight:700;cursor:pointer}
-.btn-hero:hover{background:#FBC02D}
-input[type=file]{display:none}
+/* CARDS / KPI */
+.grid{display:grid;gap:16px;}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+.grid-3{grid-template-columns:repeat(3,1fr);}
+.grid-5{grid-template-columns:repeat(5,1fr);}
+@media(max-width:1100px){.grid-4,.grid-3,.grid-5{grid-template-columns:repeat(2,1fr);}}
 
-/* CARDS KPI */
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
-.kpi{background:#fff;border-radius:8px;padding:16px 18px;border-top:3px solid #FFD600}
-.kpi-val{font-size:26px;font-weight:700}
-.kpi-lbl{font-size:11px;color:#888;margin-top:3px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
-.kpi.ok .kpi-val{color:#0F6E56}
-.kpi.warn .kpi-val{color:#BA7517}
-.kpi.err .kpi-val{color:#C00000}
-.kpi.blue .kpi-val{color:#1A5FA8}
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:18px 20px;
+}
+.kpi .label{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+.kpi .value{font-size:26px;font-weight:800;margin-top:6px;}
+.kpi .bar{height:4px;border-radius:3px;background:var(--yellow);margin-top:12px;width:40%;}
 
-/* CARD */
-.card{background:#fff;border-radius:8px;padding:18px 20px;margin-bottom:16px}
-.card-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.card-title{font-size:13px;font-weight:700}
-.card-sub{font-size:11px;color:#888}
+.section{margin-bottom:26px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.section-head h3{font-size:15px;margin:0;font-weight:800;}
+
+/* BUTTONS */
+.btn{
+  background:var(--black);color:var(--yellow);border:none;border-radius:8px;
+  padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;
+}
+.btn:hover{background:#333;}
+.btn-yellow{background:var(--yellow);color:var(--black);}
+.btn-yellow:hover{background:var(--yellow-dark);}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-outline:hover{background:#eee;}
+.btn-sm{padding:6px 10px;font-size:12px;border-radius:6px;}
 
 /* TABLE */
-.tbl-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th{background:#1A1A1A;color:#FFD600;font-weight:700;text-align:left;padding:8px 10px;white-space:nowrap;position:sticky;top:0}
-th:first-child{border-radius:4px 0 0 0}
-th:last-child{border-radius:0 4px 0 0}
-td{padding:7px 10px;border-bottom:1px solid #F0F0F0;white-space:nowrap;vertical-align:middle}
-tr:hover td{background:#FFFDE7}
-.tbl-empty{text-align:center;color:#aaa;padding:32px;font-size:13px}
+.table-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--border);border-radius:12px;}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead th{
+  background:var(--black);color:#fff;text-align:left;padding:10px 12px;
+  position:sticky;top:0;white-space:nowrap;font-size:11.5px;letter-spacing:.3px;
+}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+tbody tr{cursor:pointer;}
+tbody tr:hover{background:#FFFBEA;}
+.badge{
+  display:inline-block;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;
+}
+.badge-ok{background:#E5F6EA;color:var(--ok);}
+.badge-warn{background:#FFF3DC;color:var(--warn);}
+.badge-na{background:#EEE;color:var(--muted);}
+.badge-wait{background:#E6EEFF;color:var(--info);}
 
-/* BADGE */
-.badge{display:inline-block;font-size:10px;padding:3px 8px;border-radius:10px;font-weight:700}
-.badge-ok{background:#E1F5EE;color:#0B5E47}
-.badge-pend{background:#FEF3C7;color:#92400E}
-.badge-na{background:#F3F4F6;color:#6B7280}
-.badge-transp{background:#DEEAF1;color:#1F4E79}
+/* FILTER BAR */
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;align-items:center;}
+.filters select,.filters input[type=text]{
+  padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;background:#fff;min-width:130px;
+}
+.filters input[type=text]{min-width:220px;}
+.filters .clear{color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;background:none;border:none;}
 
-/* FILTROS */
-.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
-.search{padding:7px 11px;border:1px solid #E0E0E0;border-radius:6px;font-size:12px;min-width:200px;flex:1}
-.sel{padding:7px 10px;border:1px solid #E0E0E0;border-radius:6px;font-size:12px;background:#fff;cursor:pointer}
-.filter-count{font-size:11px;color:#888;margin-left:4px}
+/* PAGINATION */
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;font-size:12.5px;color:var(--muted);}
+.pagination .pages{display:flex;gap:6px;}
+.pagination button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;}
+.pagination button.active{background:var(--black);color:var(--yellow);border-color:var(--black);}
+.pagination button:disabled{opacity:.4;cursor:default;}
 
-/* PROGRESS */
-.prog{height:6px;background:#EEE;border-radius:3px;overflow:hidden;margin-top:4px}
-.prog-fill{height:100%;background:#FFD600;border-radius:3px}
-.prog-fill.g{background:#0F6E56}
+/* UPLOAD */
+.upload-zone{
+  border:2px dashed var(--border);border-radius:16px;background:var(--card);
+  padding:60px 30px;text-align:center;max-width:640px;margin:40px auto;
+}
+.upload-zone.drag{border-color:var(--yellow);background:#FFFBEA;}
+.upload-zone .icon{font-size:44px;margin-bottom:14px;}
+.upload-zone h2{margin:0 0 6px;font-size:18px;}
+.upload-zone p{color:var(--muted);font-size:13px;margin:0 0 20px;}
 
-/* LOADING */
-.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:999}
-.loading-box{background:#fff;border-radius:10px;padding:40px;text-align:center;min-width:260px}
-.spin{width:44px;height:44px;border:4px solid #EEE;border-top-color:#FFD600;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 16px}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* RESUMO TRANSPORTADORA */
-.transp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.tc{background:#F8F8F8;border:1px solid #E8E8E8;border-left:4px solid #FFD600;border-radius:8px;padding:14px}
-.tc-nome{font-size:11px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
-.tc-val{font-size:22px;font-weight:700}
-.tc-pend{font-size:11px;color:#C00000;margin-top:3px}
-.tc-ok{font-size:11px;color:#0F6E56;margin-top:3px}
-
-/* MESES */
-.mes-tag{display:inline-block;background:#1A1A1A;color:#FFD600;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:700}
-
-/* TABS */
-.tabs{display:flex;gap:0;border-bottom:2px solid #E0E0E0;margin-bottom:16px}
-.tab{background:none;border:none;padding:10px 18px;font-size:13px;font-weight:500;color:#888;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px}
-.tab.active{color:#1A1A1A;border-bottom-color:#FFD600;font-weight:700}
-
-/* DETALHE NF */
-.det-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.det-block{background:#F8F8F8;border-radius:8px;padding:14px}
-.det-label{font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.det-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #EEE;font-size:13px}
-.det-row:last-child{border:none}
-.det-key{color:#666}
-.det-val{font-weight:600}
-
-/* PAGINAÇÃO */
-.pag{display:flex;align-items:center;justify-content:space-between;padding:10px 0;font-size:12px;color:#888}
-.pag-btns{display:flex;gap:4px}
-.pag-btn{border:1px solid #E0E0E0;background:#fff;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer}
-.pag-btn.active{background:#1A1A1A;color:#FFD600;border-color:#1A1A1A;font-weight:700}
-.pag-btn:disabled{opacity:.4;cursor:default}
+/* TRANSPORTADORA CARD */
+.tcard{cursor:pointer;transition:.15s;}
+.tcard:hover{border-color:var(--yellow);box-shadow:0 2px 10px rgba(0,0,0,.06);}
+.tcard .name{font-weight:800;font-size:13px;margin-bottom:8px;}
+.tcard .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:2px 0;}
+.tcard .row b{color:var(--text);}
 
 /* MODAL */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center}
-.modal-bg.hidden{display:none}
-.modal{background:#fff;border-radius:10px;padding:28px;min-width:460px;max-width:600px;width:90%}
-.modal-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-.modal-title{font-size:15px;font-weight:700}
-.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#888;line-height:1}
-
-/* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:#1A1A1A;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;transform:translateY(80px);transition:transform .3s;border-left:4px solid #FFD600}
-.toast.show{transform:translateY(0)}
-
-/* ALERTA */
-.alerta{background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-
-/* RESPONSIVO */
-@media(max-width:768px){
-  .kpi-row{grid-template-columns:1fr 1fr}
-  .det-grid{grid-template-columns:1fr}
-  .nav-btn{display:none}
+#modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;
+  z-index:999;
 }
+#modal-overlay.hidden{display:none;}
+#modal{
+  background:#fff;border-radius:14px;width:560px;max-width:92vw;max-height:86vh;overflow-y:auto;
+  padding:0;
+}
+.modal-head{background:var(--black);color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;}
+.modal-head h3{margin:0;font-size:16px;}
+.modal-head .close{background:none;border:none;color:var(--yellow);font-size:22px;cursor:pointer;line-height:1;}
+.modal-body{padding:20px 22px;}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;}
+.modal-field .l{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.3px;}
+.modal-field .v{font-size:14px;font-weight:600;margin-top:2px;}
+
+/* MONTH / REGION CARDS */
+.pickcard{cursor:pointer;transition:.15s;}
+.pickcard.selected{border-color:var(--yellow);background:#FFFBEA;box-shadow:0 0 0 2px var(--yellow) inset;}
+.pickcard:hover{border-color:var(--yellow-dark);}
+.pickcard .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.pickcard .top .name{font-weight:800;font-size:14px;}
+.pickcard .top .chip{background:var(--black);color:var(--yellow);font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;}
+
+.empty-state{padding:60px 20px;text-align:center;color:var(--muted);}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;height:320px;}
+.two-col{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;}
+@media(max-width:1100px){.two-col{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
-
-<!-- LOADING -->
-<div class="loading-overlay" id="loading" style="display:none">
-  <div class="loading-box">
-    <div class="spin"></div>
-    <div id="loading-msg" style="font-size:13px;color:#666">Processando...</div>
-  </div>
-</div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
-
-<!-- MODAL DETALHE NF -->
-<div class="modal-bg hidden" id="modal-nf">
-  <div class="modal">
-    <div class="modal-hd">
-      <span class="modal-title" id="modal-nf-title">Detalhe da NF</span>
-      <button class="modal-close" onclick="fecharModal('modal-nf')">×</button>
-    </div>
-    <div id="modal-nf-body"></div>
-  </div>
-</div>
-
-<!-- NAV -->
-<nav class="nav">
-  <span class="nav-logo">PAPELITO</span>
-  <button class="nav-btn active" onclick="showPage('dashboard',this)">Dashboard</button>
-  <button class="nav-btn" onclick="showPage('master',this)">Master NFs</button>
-  <button class="nav-btn" onclick="showPage('pendencias',this)">Pendências</button>
-  <button class="nav-btn" onclick="showPage('transportadoras',this)">Transportadoras</button>
-  <button class="nav-btn" onclick="showPage('conciliacao',this)">Conciliação</button>
-  <button class="nav-btn" onclick="showPage('resumo-mes',this)">Por Mês</button>
-  <div class="nav-sep"></div>
-  <span class="nav-file-name" id="nav-file-name"></span>
-  <button class="nav-upload" onclick="document.getElementById('fileInput').click()">📂 Importar Excel</button>
-  <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="carregarArquivo(this)">
-</nav>
-
-<!-- UPLOAD INICIAL -->
-<div id="page-upload">
-  <div class="upload-hero">
-    <div class="icon">📊</div>
-    <h2>Análise Faturamento × Frete</h2>
-    <p>Importe o arquivo <strong>Master_Faturamento_Frete_2026.xlsx</strong> para visualizar os dados de todas as NFs, pendências por transportadora e conciliação de fretes.</p>
-    <button class="btn-hero" onclick="document.getElementById('fileInput').click()">Selecionar arquivo Excel</button>
-  </div>
-</div>
-
-<!-- DASHBOARD -->
-<div id="page-dashboard" class="page">
-  <div class="kpi-row">
-    <div class="kpi"><div class="kpi-val" id="k-total">—</div><div class="kpi-lbl">Total de NFs</div></div>
-    <div class="kpi ok"><div class="kpi-val" id="k-ok">—</div><div class="kpi-lbl">✔ Com frete</div></div>
-    <div class="kpi warn"><div class="kpi-val" id="k-pend">—</div><div class="kpi-lbl">⚠ Pendentes</div></div>
-    <div class="kpi blue"><div class="kpi-val" id="k-fat">—</div><div class="kpi-lbl">Faturamento total</div></div>
-  </div>
-
-  <div class="card">
-    <div class="card-hd"><span class="card-title">Evolução por mês</span></div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Mês</th><th>Total NFs</th><th>✔ Com frete</th><th>⚠ Pendentes</th><th>— N/A</th><th>Faturamento</th><th>Total Frete</th><th>% Frete/Fat</th><th>Cobertura</th></tr></thead>
-        <tbody id="tab-meses"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-hd"><span class="card-title">Pendências por transportadora</span><span class="card-sub" id="dash-pend-total"></span></div>
-    <div class="transp-grid" id="dash-transp"></div>
-  </div>
-</div>
-
-<!-- MASTER NFs -->
-<div id="page-master" class="page">
-  <div class="card">
-    <div class="card-hd">
-      <span class="card-title">Master — Faturamento × Frete</span>
-      <span class="card-sub" id="master-count"></span>
-    </div>
-    <div class="filters">
-      <input class="search" id="s-master" placeholder="Buscar NF, parceiro, cidade..." oninput="filtrarMaster()">
-      <select class="sel" id="f-mes" onchange="filtrarMaster()"><option value="">Todos os meses</option></select>
-      <select class="sel" id="f-status" onchange="filtrarMaster()">
-        <option value="">Todos os status</option>
-        <option value="ok">✔ Com frete</option>
-        <option value="pend">⚠ Pendente</option>
-        <option value="na">— N/A</option>
-      </select>
-      <select class="sel" id="f-transp" onchange="filtrarMaster()"><option value="">Todas as transp.</option></select>
-      <select class="sel" id="f-uf" onchange="filtrarMaster()"><option value="">Todos os estados</option></select>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Mês</th><th>NF</th><th>Empresa</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Tipo</th><th>Faturamento</th><th>Transportadora</th><th>Frete</th><th>% Frete</th><th>Status</th></tr></thead>
-        <tbody id="tab-master"></tbody>
-      </table>
-    </div>
-    <div class="pag" id="pag-master"></div>
-  </div>
-</div>
-
-<!-- PENDÊNCIAS -->
-<div id="page-pendencias" class="page">
-  <div class="card">
-    <div class="card-hd">
-      <span class="card-title">Pendências — sem frete preenchido</span>
-      <span class="card-sub" id="pend-count"></span>
-    </div>
-    <div class="alerta">⚠ NFs abaixo precisam ter o valor do frete preenchido no Master.</div>
-    <div class="filters">
-      <input class="search" id="s-pend" placeholder="Buscar NF, parceiro..." oninput="filtrarPend()">
-      <select class="sel" id="f-pend-transp" onchange="filtrarPend()"><option value="">Todas as transp.</option></select>
-      <select class="sel" id="f-pend-mes" onchange="filtrarPend()"><option value="">Todos os meses</option></select>
-      <select class="sel" id="f-pend-uf" onchange="filtrarPend()"><option value="">Todos os estados</option></select>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Mês</th><th>NF</th><th>Empresa</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Tipo</th><th>Faturamento</th><th>Transportadora</th><th>⚠ Ação</th></tr></thead>
-        <tbody id="tab-pend"></tbody>
-      </table>
-    </div>
-    <div class="pag" id="pag-pend"></div>
-  </div>
-</div>
-
-<!-- TRANSPORTADORAS -->
-<div id="page-transportadoras" class="page">
-  <div class="kpi-row" id="transp-kpis"></div>
-  <div class="card">
-    <div class="card-hd"><span class="card-title">Resumo por transportadora</span></div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Transportadora</th><th>Total NFs</th><th>✔ Com frete</th><th>⚠ Pendentes</th><th>— N/A</th><th>Faturamento</th><th>Total Frete</th><th>% Frete/Fat</th><th>Cobertura</th></tr></thead>
-        <tbody id="tab-transp"></tbody>
-      </table>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-hd"><span class="card-title">Detalhamento por transportadora</span></div>
-    <div class="filters">
-      <select class="sel" id="f-det-transp" onchange="renderDetTransp()"><option value="">Selecione uma transportadora</option></select>
-      <select class="sel" id="f-det-mes" onchange="renderDetTransp()"><option value="">Todos os meses</option></select>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Mês</th><th>NF</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Faturamento</th><th>Frete</th><th>Status</th></tr></thead>
-        <tbody id="tab-det-transp"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- CONCILIAÇÃO -->
-<div id="page-conciliacao" class="page">
-  <div class="card">
-    <div class="card-hd">
-      <span class="card-title">Conciliação de Fretes</span>
-      <span class="card-sub">Compare NFs do Master com cobranças das transportadoras</span>
-    </div>
-    <div class="alerta">📋 Para conciliar: cole abaixo os dados do arquivo da transportadora (CTEs ou faturas). O sistema vai cruzar automaticamente com o Master.</div>
-
-    <div class="tabs">
-      <button class="tab active" onclick="switchTab('conc-status','conc-pendente',this)">⚠ Pendentes no Master</button>
-      <button class="tab" onclick="switchTab('conc-status','conc-ok',this)">✔ Conciliadas</button>
-      <button class="tab" onclick="switchTab('conc-status','conc-divergencia',this)">🔴 Divergências</button>
-    </div>
-
-    <div id="conc-pendente">
-      <div class="filters">
-        <select class="sel" id="f-conc-transp" onchange="filtrarConc()"><option value="">Todas as transportadoras</option></select>
-        <select class="sel" id="f-conc-mes" onchange="filtrarConc()"><option value="">Todos os meses</option></select>
-      </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>Mês</th><th>NF</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Faturamento</th><th>Transportadora</th><th>Status</th></tr></thead>
-          <tbody id="tab-conc-pend"></tbody>
-        </table>
+<div id="app">
+  <aside id="sidebar">
+    <div class="logo">
+      <div class="dot"></div>
+      <div>
+        <div class="title">PAPELITO</div>
+        <div class="sub">Faturamento × Frete</div>
       </div>
     </div>
-    <div id="conc-ok" style="display:none">
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>NF</th><th>Parceiro</th><th>Transportadora</th><th>Frete Master</th><th>Status</th></tr></thead>
-          <tbody id="tab-conc-ok"><tr><td colspan="5" class="tbl-empty">Nenhuma NF conciliada ainda.</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-    <div id="conc-divergencia" style="display:none">
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>NF</th><th>Parceiro</th><th>Transportadora</th><th>Frete Master</th><th>Frete Transp.</th><th>Diferença</th></tr></thead>
-          <tbody id="tab-conc-div"><tr><td colspan="6" class="tbl-empty">Nenhuma divergência encontrada.</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+    <nav id="nav"></nav>
+    <div class="footer">Marcos Cordeiro · Logística/Suprimentos</div>
+  </aside>
+  <main id="content"></main>
 </div>
-
-<!-- POR MÊS -->
-<div id="page-resumo-mes" class="page">
-  <div class="card">
-    <div class="card-hd">
-      <span class="card-title">Análise por mês</span>
-    </div>
-    <div class="filters">
-      <select class="sel" id="f-rm-mes" onchange="renderResumoMes()"><option value="">Todos os meses</option></select>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Mês</th><th>Total NFs</th><th>✔ Com frete</th><th>⚠ Pendentes</th><th>— N/A</th><th>Faturamento</th><th>Total Frete</th><th>% Frete/Fat</th><th>Cobertura</th></tr></thead>
-        <tbody id="tab-rm"></tbody>
-      </table>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-hd">
-      <span class="card-title" id="rm-detail-title">Selecione um mês para ver o detalhe</span>
-    </div>
-    <div class="filters">
-      <input class="search" id="s-rm" placeholder="Buscar NF, parceiro..." oninput="filtrarRM()">
-      <select class="sel" id="f-rm-status" onchange="filtrarRM()">
-        <option value="">Todos</option>
-        <option value="ok">✔ Com frete</option>
-        <option value="pend">⚠ Pendente</option>
-      </select>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>NF</th><th>Empresa</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Faturamento</th><th>Transportadora</th><th>Frete</th><th>Status</th></tr></thead>
-        <tbody id="tab-rm-detail"></tbody>
-      </table>
-    </div>
-  </div>
+<div id="modal-overlay" class="hidden">
+  <div id="modal"></div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-// ESTADO GLOBAL
-// ═══════════════════════════════════════════════════════
-let dados = [];
-let paginaAtual = {master:1, pend:1};
-const POR_PAGINA = 100;
+/* ============================================================
+   ESTADO GLOBAL
+============================================================ */
+const state = {
+  data: [],
+  screen: 'upload',
+  master: { search:'', mes:'', status:'', transportadora:'', uf:'', regiao:'', page:1, pageSize:25 },
+  pend:   { mes:'', transportadora:'', uf:'', page:1, pageSize:25 },
+  transp: { selected:null, page:1, pageSize:25 },
+  mes:    { selected:null },
+  regiao: { selected:null },
+  charts: {}
+};
 
-// ═══════════════════════════════════════════════════════
-// NAVEGAÇÃO
-// ═══════════════════════════════════════════════════════
-function showPage(id, el) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  const pg = document.getElementById('page-'+id);
-  if (pg) pg.classList.add('active');
-  if (el) el.classList.add('active');
-  if (id === 'transportadoras') renderTransportadoras();
-  if (id === 'resumo-mes') renderResumoMes();
+const MES_ORDER = { Jan:1, Fev:2, Mar:3, Abr:4, Mai:5, Jun:6, Jul:7, Ago:8, Set:9, Out:10, Nov:11, Dez:12 };
+const REGIOES = ['Norte','Nordeste','Centro-Oeste','Sudeste','Sul'];
+
+const SCREENS = [
+  { id:'upload',        label:'Upload',          n:1 },
+  { id:'dashboard',     label:'Dashboard',        n:2 },
+  { id:'master',        label:'Master NFs',       n:3 },
+  { id:'pendencias',    label:'Pendências',       n:4 },
+  { id:'transportadoras',label:'Transportadoras', n:5 },
+  { id:'conciliacao',   label:'Conciliação',      n:6 },
+  { id:'porMes',        label:'Por Mês',          n:7 },
+  { id:'regiao',        label:'Filtro Região',    n:9 },
+];
+
+/* ============================================================
+   HELPERS
+============================================================ */
+function fmtBRL(v){
+  if(v===null||v===undefined||v===''||isNaN(v)) return '—';
+  return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+}
+function fmtNum(v){ return v.toLocaleString('pt-BR'); }
+function esc(s){ return (s===undefined||s===null) ? '' : String(s); }
+function mesKey(mes){
+  if(!mes) return 0;
+  const [m,y] = mes.split('/');
+  return (parseInt(y)*12) + (MES_ORDER[m]||0);
+}
+function sortMeses(list){
+  return [...list].sort((a,b)=> mesKey(a)-mesKey(b));
+}
+function statusBadge(status){
+  let cls='badge-na';
+  if(status && status.indexOf('✔')>-1) cls='badge-ok';
+  else if(status && status.indexOf('⚠')>-1) cls='badge-warn';
+  else if(status && status.indexOf('⏳')>-1) cls='badge-wait';
+  return `<span class="badge ${cls}">${esc(status)}</span>`;
+}
+function uniqueSorted(arr){ return [...new Set(arr.filter(x=>x!==undefined && x!==null && x!==''))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+
+function isConciliada(r){ return (r.status==='✔ Frete OK'||r.status==='✔ Encontrado') && !r.pendencia; }
+function isDivergencia(r){
+  const okStatus = (r.status==='✔ Frete OK'||r.status==='✔ Encontrado');
+  const naStatus = r.status==='— Não aplica';
+  return (okStatus && !!r.pendencia) || (naStatus && !!r.pendencia);
+}
+function isPendente(r){ return (r.status==='⚠ Preencher'||r.status==='⏳ Chegada na filial'); }
+function isNaoAplica(r){ return r.status==='— Não aplica' && !r.pendencia; }
+
+/* ============================================================
+   NAVEGAÇÃO
+============================================================ */
+function renderNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = SCREENS.map(s=>{
+    const disabled = state.data.length===0 && s.id!=='upload';
+    return `<button class="nav-btn ${state.screen===s.id?'active':''}" ${disabled?'disabled':''} onclick="navigate('${s.id}')">
+      <span class="n">${s.n}</span> ${s.label}
+    </button>`;
+  }).join('');
+}
+function navigate(screen){
+  if(state.data.length===0 && screen!=='upload') return;
+  state.screen = screen;
+  renderNav();
+  renderContent();
 }
 
-function switchTab(grp, id, el) {
-  const parent = document.getElementById('page-conciliacao');
-  parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  ['conc-pendente','conc-ok','conc-divergencia'].forEach(i => {
-    const el2 = document.getElementById(i);
-    if (el2) el2.style.display = i === id ? 'block' : 'none';
-  });
+function renderContent(){
+  const c = document.getElementById('content');
+  switch(state.screen){
+    case 'upload': c.innerHTML = tplUpload(); break;
+    case 'dashboard': c.innerHTML = tplDashboard(); afterDashboard(); break;
+    case 'master': c.innerHTML = tplMaster(); break;
+    case 'pendencias': c.innerHTML = tplPendencias(); break;
+    case 'transportadoras': c.innerHTML = tplTransportadoras(); break;
+    case 'conciliacao': c.innerHTML = tplConciliacao(); break;
+    case 'porMes': c.innerHTML = tplPorMes(); break;
+    case 'regiao': c.innerHTML = tplRegiao(); break;
+  }
 }
 
-// ═══════════════════════════════════════════════════════
-// IMPORTAR EXCEL
-// ═══════════════════════════════════════════════════════
-function carregarArquivo(input) {
-  const file = input.files[0];
-  if (!file) return;
-  document.getElementById('nav-file-name').textContent = file.name;
-  mostrarLoading('Lendo arquivo Excel...');
-
+/* ============================================================
+   TELA 1 — UPLOAD
+============================================================ */
+function tplUpload(){
+  const loaded = state.data.length>0;
+  return `
+    <h1 class="page-title">Importar Master de Pendências</h1>
+    <p class="page-sub">Envie o arquivo Excel (.xlsx) com o cabeçalho na 4ª linha.</p>
+    <div class="upload-zone" id="dropzone" ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleDrop(event)">
+      <div class="icon">📄</div>
+      <h2>${loaded ? 'Arquivo carregado com sucesso' : 'Arraste o arquivo aqui'}</h2>
+      <p>${loaded ? state.data.length + ' NFs importadas — pode importar outro arquivo para substituir os dados.' : 'ou clique no botão abaixo para selecionar (.xlsx)'}</p>
+      <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(event.target.files[0])">
+      <button class="btn btn-yellow" onclick="document.getElementById('fileInput').click()">Selecionar arquivo Excel</button>
+      <div id="uploadMsg" style="margin-top:14px;font-size:13px;color:var(--muted);"></div>
+    </div>
+    ${loaded ? `<div style="max-width:640px;margin:0 auto;"><button class="btn btn-outline" onclick="navigate('dashboard')">Ir para o Dashboard →</button></div>` : ''}
+  `;
+}
+function handleDrop(e){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if(file) handleFile(file);
+}
+function handleFile(file){
+  if(!file) return;
+  const msg = ()=>document.getElementById('uploadMsg');
   const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      mostrarLoading('Identificando abas...');
+  reader.onload = function(e){
+    try{
       const wb = XLSX.read(e.target.result, {type:'array'});
-      
-      // Buscar aba MASTER
-      let sheetName = wb.SheetNames.find(n =>
-        n.toUpperCase().includes('MASTER') ||
-        n.toUpperCase().includes('FATUR') ||
-        n.toUpperCase().includes('GERAL')
-      ) || wb.SheetNames[0];
-      
-      const ws = wb.Sheets[sheetName];
-      mostrarLoading('Processando dados...');
-      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-
-      // Detectar linha de cabeçalho
-      let hdrIdx = -1;
-      for (let i = 0; i < Math.min(15, rows.length); i++) {
-        const r = rows[i].map(v => String(v).toUpperCase());
-        if (r.some(v => v.includes('NF') || v.includes('NOTA')) && r.some(v => v.includes('FAT') || v.includes('VALOR'))) {
-          hdrIdx = i; break;
-        }
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      // linha 4 (índice 3) é o cabeçalho -> range começa em 3
+      const rows = XLSX.utils.sheet_to_json(sheet, {range:3, defval:null});
+      const parsed = rows.filter(r => r['Nº NF']!==null && r['Nº NF']!==undefined && r['Nº NF']!=='').map(r=>({
+        mes: r['MÊS'] ?? '',
+        trim: r['TRIM.'] ?? '',
+        nf: r['Nº NF'] ?? '',
+        empresa: r['EMPRESA'] ?? '',
+        parceiro: r['PARCEIRO'] ?? '',
+        cidade: r['CIDADE'] ?? '',
+        uf: r['UF'] ?? '',
+        tipo: r['TIPO'] ?? '',
+        transportadora: r['TRANSPORTADORA'] ?? '',
+        fat: (typeof r['FAT. (R$)']==='number') ? r['FAT. (R$)'] : parseBRNumber(r['FAT. (R$)']),
+        frete: (typeof r['FRETE (R$)']==='number') ? r['FRETE (R$)'] : parseBRNumber(r['FRETE (R$)']),
+        status: r['STATUS'] ?? '',
+        pendencia: r['PENDÊNCIA'] ?? '',
+        regiao: r['REGIÃO'] ?? '',
+      }));
+      if(parsed.length===0){
+        if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma linha de dados encontrada. Verifique o layout do arquivo.</span>';
+        return;
       }
-      if (hdrIdx < 0) hdrIdx = 3;
-
-      const hdrs = rows[hdrIdx].map(v => String(v).trim().toUpperCase());
-
-      // Mapear colunas
-      const col = (terms) => {
-        const t = Array.isArray(terms) ? terms : [terms];
-        return hdrs.findIndex(h => t.some(term => h.includes(term)));
-      };
-
-      const idx = {
-        mes:    col(['MÊS','MES','M\u00caS']),
-        nf:     col(['NF','NOTA FISCAL','NUMERO NF','NÚM']),
-        emp:    col(['EMPRESA','FILIAL','EMPR']),
-        parc:   col(['PARCEIRO','CLIENTE','DESTINAT']),
-        cidade: col(['CIDADE','MUNIC']),
-        uf:     col(['UF','ESTADO']),
-        tipo:   col(['TIPO']),
-        fat:    col(['FATURAMENTO','VALOR NF','VL NF','VALOR DA NF']),
-        transp: col(['TRANSPORTADORA FRETE','TRANSP FRETE','TRANSPORTADORA']),
-        frete:  col(['VALOR FRETE','VL FRETE','FRETE']),
-        status: col(['STATUS']),
-      };
-      // fallback para faturamento
-      if (idx.fat < 0) idx.fat = col(['FAT']);
-
-      dados = [];
-      for (let i = hdrIdx + 1; i < rows.length; i++) {
-        const r = rows[i];
-        if (!r || !r.length) continue;
-        const nf = String(r[idx.nf] || '').trim();
-        if (!nf || nf.toUpperCase().includes('TOTAL') || nf === 'NF') continue;
-
-        const mes   = String(r[idx.mes]    || '').trim();
-        const fat   = parseFloat(r[idx.fat])   || 0;
-        const frete = parseFloat(r[idx.frete]) || 0;
-        const transp= String(r[idx.transp]  || '').trim();
-        const status= String(r[idx.status]  || '').trim();
-
-        // Detectar status
-        let tipo = 'na';
-        if (status.includes('Preencher') || status.includes('⚠') || status.toLowerCase().includes('pend')) tipo = 'pend';
-        else if (status.includes('✔') || frete > 0) tipo = 'ok';
-        else if (transp && !frete) tipo = 'pend';
-
-        dados.push({
-          mes, nf,
-          empresa:  String(r[idx.emp]    || '').trim(),
-          parceiro: String(r[idx.parc]   || '').trim(),
-          cidade:   String(r[idx.cidade] || '').trim().toUpperCase(),
-          uf:       String(r[idx.uf]     || '').trim().toUpperCase(),
-          tipo:     String(r[idx.tipo]   || '').trim(),
-          fat, transp, frete, status,
-          statusTipo: tipo,
-          pct: fat > 0 ? (frete/fat*100) : 0,
-        });
-      }
-
-      esconderLoading();
-      if (!dados.length) { toast('Nenhum dado encontrado. Verifique o arquivo.','erro'); return; }
-      
-      inicializar();
-      document.getElementById('page-upload').classList.add('hidden');
-      showPage('dashboard', document.querySelector('.nav-btn'));
-      toast(`✔ ${fmtN(dados.length)} NFs carregadas com sucesso`);
-    } catch(err) {
-      esconderLoading();
-      toast('Erro ao ler o arquivo: ' + err.message, 'erro');
+      state.data = parsed;
+      resetFilters();
+      if(msg()) msg().innerHTML = `<span style="color:var(--ok)">${parsed.length} NFs carregadas com sucesso!</span>`;
+      renderNav();
+      navigate('dashboard');
+    }catch(err){
+      console.error(err);
+      if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Erro ao ler o arquivo: '+err.message+'</span>';
     }
   };
   reader.readAsArrayBuffer(file);
 }
-
-// ═══════════════════════════════════════════════════════
-// INICIALIZAR
-// ═══════════════════════════════════════════════════════
-function inicializar() {
-  // Popular filtros
-  const meses   = uniq(dados.map(d => d.mes).filter(Boolean));
-  const transps = uniq(dados.map(d => d.transp).filter(Boolean)).sort();
-  const ufs     = uniq(dados.map(d => d.uf).filter(Boolean)).sort();
-
-  preencher('f-mes',  meses,   'Todos os meses');
-  preencher('f-pend-mes', meses, 'Todos os meses');
-  preencher('f-rm-mes', meses, 'Todos os meses');
-  preencher('f-transp', transps, 'Todas as transp.');
-  preencher('f-pend-transp', transps, 'Todas as transp.');
-  preencher('f-det-transp', transps, 'Selecione uma transportadora');
-  preencher('f-det-mes', meses, 'Todos os meses');
-  preencher('f-conc-transp', transps, 'Todas as transportadoras');
-  preencher('f-conc-mes', meses, 'Todos os meses');
-  preencher('f-uf',   ufs,     'Todos os estados');
-  preencher('f-pend-uf', ufs,  'Todos os estados');
-
-  renderDashboard();
-  filtrarMaster();
-  filtrarPend();
-  filtrarConc();
+function parseBRNumber(v){
+  if(v===null || v===undefined || v==='') return null;
+  if(typeof v==='number') return v;
+  const cleaned = String(v).replace(/\./g,'').replace(',','.').replace(/[^\d.-]/g,'');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
+}
+function resetFilters(){
+  state.master = { search:'', mes:'', status:'', transportadora:'', uf:'', regiao:'', page:1, pageSize:25 };
+  state.pend   = { mes:'', transportadora:'', uf:'', page:1, pageSize:25 };
+  state.transp = { selected:null, page:1, pageSize:25 };
+  state.mes    = { selected:null };
+  state.regiao = { selected:null };
 }
 
-function preencher(id, arr, placeholder) {
-  const sel = document.getElementById(id);
-  if (!sel) return;
-  const val = sel.value;
-  sel.innerHTML = `<option value="">${placeholder}</option>` +
-    arr.map(v => `<option value="${v}"${v===val?' selected':''}>${v}</option>`).join('');
-}
+/* ============================================================
+   TELA 2 — DASHBOARD
+============================================================ */
+function tplDashboard(){
+  const d = state.data;
+  const totalNF = d.length;
+  const comFrete = d.filter(r=> r.frete!==null && r.frete!==undefined).length;
+  const pendentes = d.filter(r=> r.status==='⚠ Preencher').length;
+  const totalFat = d.reduce((s,r)=> s + (r.fat||0), 0);
 
-// ═══════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════
-function renderDashboard() {
-  const total = dados.length;
-  const ok    = dados.filter(d => d.statusTipo === 'ok').length;
-  const pend  = dados.filter(d => d.statusTipo === 'pend').length;
-  const fat   = dados.reduce((s,d) => s + d.fat, 0);
+  const porTransp = groupByTransportadora(d).slice(0,6);
 
-  document.getElementById('k-total').textContent = fmtN(total);
-  document.getElementById('k-ok').textContent    = fmtN(ok);
-  document.getElementById('k-pend').textContent  = fmtN(pend);
-  document.getElementById('k-fat').textContent   = fmt(fat);
+  return `
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-sub">Visão geral de faturamento e frete.</p>
 
-  // Tabela meses
-  const meses = uniq(dados.map(d => d.mes).filter(Boolean));
-  const tMes  = document.getElementById('tab-meses');
-  tMes.innerHTML = meses.map(m => {
-    const g   = dados.filter(d => d.mes === m);
-    const gOk = g.filter(d => d.statusTipo === 'ok').length;
-    const gPe = g.filter(d => d.statusTipo === 'pend').length;
-    const gNa = g.filter(d => d.statusTipo === 'na').length;
-    const gFat = g.reduce((s,d) => s+d.fat, 0);
-    const gFre = g.reduce((s,d) => s+d.frete, 0);
-    const pct  = gFat > 0 ? (gFre/gFat*100) : 0;
-    const cob  = g.length > 0 ? Math.round(gOk/g.length*100) : 0;
-    return `<tr>
-      <td><span class="mes-tag">${m}</span></td>
-      <td><b>${fmtN(g.length)}</b></td>
-      <td style="color:#0F6E56"><b>${fmtN(gOk)}</b></td>
-      <td style="color:#BA7517"><b>${fmtN(gPe)}</b></td>
-      <td style="color:#888">${fmtN(gNa)}</td>
-      <td>${fmt(gFat)}</td>
-      <td>${gFre > 0 ? fmt(gFre) : '—'}</td>
-      <td>${pct > 0 ? pct.toFixed(2)+'%' : '—'}</td>
-      <td style="min-width:120px">
-        <div style="font-size:11px;margin-bottom:3px">${cob}%</div>
-        <div class="prog"><div class="prog-fill ${cob>70?'g':''}" style="width:${cob}%"></div></div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  // Cards transportadora
-  const tMap = {};
-  dados.forEach(d => {
-    const k = d.transp || '— Não informada';
-    if (!tMap[k]) tMap[k] = {ok:0, pend:0, total:0};
-    tMap[k].total++;
-    tMap[k][d.statusTipo === 'ok' ? 'ok' : 'pend']++;
-  });
-  const sorted = Object.entries(tMap).sort((a,b) => b[1].pend - a[1].pend);
-  document.getElementById('dash-pend-total').textContent = fmtN(dados.filter(d=>d.statusTipo==='pend').length) + ' NFs pendentes';
-  document.getElementById('dash-transp').innerHTML = sorted.slice(0,8).map(([n,d]) => `
-    <div class="tc">
-      <div class="tc-nome">${n}</div>
-      <div class="tc-val">${fmtN(d.total)}</div>
-      ${d.pend > 0
-        ? `<div class="tc-pend">⚠ ${fmtN(d.pend)} pendentes</div>`
-        : `<div class="tc-ok">✔ Tudo OK</div>`}
+    <div class="grid grid-4 section">
+      <div class="card kpi"><div class="label">Total de NFs</div><div class="value">${fmtNum(totalNF)}</div><div class="bar"></div></div>
+      <div class="card kpi"><div class="label">NFs com Frete</div><div class="value">${fmtNum(comFrete)}</div><div class="bar" style="width:${totalNF? Math.round(comFrete/totalNF*100):0}%"></div></div>
+      <div class="card kpi"><div class="label">Pendentes (⚠ Preencher)</div><div class="value">${fmtNum(pendentes)}</div><div class="bar" style="width:${totalNF? Math.round(pendentes/totalNF*100):0}%;background:var(--warn)"></div></div>
+      <div class="card kpi"><div class="label">Faturamento Total</div><div class="value" style="font-size:20px;">${fmtBRL(totalFat)}</div><div class="bar"></div></div>
     </div>
-  `).join('');
-}
 
-// ═══════════════════════════════════════════════════════
-// MASTER NFs
-// ═══════════════════════════════════════════════════════
-let filtradoMaster = [];
-function filtrarMaster() {
-  const q  = (document.getElementById('s-master')?.value || '').toLowerCase();
-  const m  = document.getElementById('f-mes')?.value || '';
-  const s  = document.getElementById('f-status')?.value || '';
-  const t  = document.getElementById('f-transp')?.value || '';
-  const uf = document.getElementById('f-uf')?.value || '';
-  filtradoMaster = dados.filter(d =>
-    (!q || d.nf.toLowerCase().includes(q) || d.parceiro.toLowerCase().includes(q) || d.cidade.toLowerCase().includes(q)) &&
-    (!m  || d.mes === m) &&
-    (!s  || d.statusTipo === s) &&
-    (!t  || d.transp === t) &&
-    (!uf || d.uf === uf)
-  );
-  paginaAtual.master = 1;
-  renderMaster();
-}
+    <div class="section">
+      <div class="section-head"><h3>Evolução por Mês</h3></div>
+      <div class="chart-box"><canvas id="evoChart"></canvas></div>
+    </div>
 
-function renderMaster() {
-  const total = filtradoMaster.length;
-  const inicio = (paginaAtual.master - 1) * POR_PAGINA;
-  const pagina = filtradoMaster.slice(inicio, inicio + POR_PAGINA);
-  document.getElementById('master-count').textContent = fmtN(total) + ' NFs';
-  document.getElementById('tab-master').innerHTML = pagina.length
-    ? pagina.map((d,i) => rowMaster(d,i)).join('')
-    : `<tr><td colspan="12" class="tbl-empty">Nenhum resultado.</td></tr>`;
-  renderPag('pag-master', total, paginaAtual.master, pg => { paginaAtual.master = pg; renderMaster(); });
-}
-
-function rowMaster(d, i) {
-  const badge = d.statusTipo === 'ok' ? 'badge-ok' : d.statusTipo === 'pend' ? 'badge-pend' : 'badge-na';
-  const lbl   = d.statusTipo === 'ok' ? '✔ OK' : d.statusTipo === 'pend' ? '⚠ Pendente' : '—';
-  return `<tr style="cursor:pointer" onclick="abrirDetalheNF(${JSON.stringify(d).replace(/"/g,'&quot;')})">
-    <td><span class="mes-tag">${d.mes}</span></td>
-    <td><b>${d.nf}</b></td>
-    <td style="font-size:11px;color:#666">${d.empresa}</td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${d.parceiro}</td>
-    <td>${d.cidade}</td><td>${d.uf}</td><td style="font-size:11px">${d.tipo}</td>
-    <td>${fmt(d.fat)}</td>
-    <td>${d.transp ? `<span class="badge badge-transp">${d.transp}</span>` : '—'}</td>
-    <td>${d.frete > 0 ? fmt(d.frete) : '—'}</td>
-    <td>${d.pct > 0 ? d.pct.toFixed(2)+'%' : '—'}</td>
-    <td><span class="badge ${badge}">${lbl}</span></td>
-  </tr>`;
-}
-
-function abrirDetalheNF(d) {
-  document.getElementById('modal-nf-title').textContent = `NF ${d.nf} — ${d.parceiro}`;
-  document.getElementById('modal-nf-body').innerHTML = `
-    <div class="det-grid">
-      <div class="det-block">
-        <div class="det-label">Identificação</div>
-        ${detRow('Mês', `<span class="mes-tag">${d.mes}</span>`)}
-        ${detRow('NF', d.nf)}
-        ${detRow('Empresa', d.empresa)}
-        ${detRow('Parceiro', d.parceiro)}
-        ${detRow('Cidade', d.cidade + ' / ' + d.uf)}
-        ${detRow('Tipo Op.', d.tipo)}
+    <div class="section">
+      <div class="section-head"><h3>Por Transportadora</h3><button class="btn-outline btn btn-sm" onclick="navigate('transportadoras')">Ver todas →</button></div>
+      <div class="grid grid-3">
+        ${porTransp.map(t=>`
+          <div class="card tcard" onclick="openTransportadora('${escJs(t.nome)}')">
+            <div class="name">${esc(t.nome)}</div>
+            <div class="row"><span>NFs</span><b>${fmtNum(t.count)}</b></div>
+            <div class="row"><span>Faturamento</span><b>${fmtBRL(t.fat)}</b></div>
+            <div class="row"><span>Frete</span><b>${fmtBRL(t.frete)}</b></div>
+            <div class="row"><span>Pendentes</span><b>${fmtNum(t.pendentes)}</b></div>
+          </div>`).join('')}
       </div>
-      <div class="det-block">
-        <div class="det-label">Financeiro</div>
-        ${detRow('Faturamento', fmt(d.fat))}
-        ${detRow('Transportadora', d.transp || '—')}
-        ${detRow('Frete', d.frete > 0 ? fmt(d.frete) : '—')}
-        ${detRow('% Frete/Fat', d.pct > 0 ? d.pct.toFixed(2)+'%' : '—')}
-        ${detRow('Status', `<span class="badge ${d.statusTipo==='ok'?'badge-ok':'badge-pend'}">${d.statusTipo==='ok'?'✔ OK':'⚠ Pendente'}</span>`)}
-      </div>
-    </div>`;
-  document.getElementById('modal-nf').classList.remove('hidden');
+    </div>
+  `;
 }
-
-function detRow(k, v) {
-  return `<div class="det-row"><span class="det-key">${k}</span><span class="det-val">${v}</span></div>`;
-}
-
-// ═══════════════════════════════════════════════════════
-// PENDÊNCIAS
-// ═══════════════════════════════════════════════════════
-let filtradoPend = [];
-function filtrarPend() {
-  const q  = (document.getElementById('s-pend')?.value || '').toLowerCase();
-  const t  = document.getElementById('f-pend-transp')?.value || '';
-  const m  = document.getElementById('f-pend-mes')?.value || '';
-  const uf = document.getElementById('f-pend-uf')?.value || '';
-  filtradoPend = dados.filter(d =>
-    d.statusTipo === 'pend' &&
-    (!q  || d.nf.toLowerCase().includes(q) || d.parceiro.toLowerCase().includes(q)) &&
-    (!t  || d.transp === t) &&
-    (!m  || d.mes === m) &&
-    (!uf || d.uf === uf)
-  );
-  paginaAtual.pend = 1;
-  renderPend();
-}
-
-function renderPend() {
-  const total = filtradoPend.length;
-  const inicio = (paginaAtual.pend - 1) * POR_PAGINA;
-  const pagina = filtradoPend.slice(inicio, inicio + POR_PAGINA);
-  document.getElementById('pend-count').textContent = fmtN(total) + ' NFs pendentes';
-  document.getElementById('tab-pend').innerHTML = pagina.length
-    ? pagina.map(d => `<tr>
-        <td><span class="mes-tag">${d.mes}</span></td>
-        <td><b>${d.nf}</b></td>
-        <td style="font-size:11px;color:#666">${d.empresa}</td>
-        <td>${d.parceiro}</td><td>${d.cidade}</td><td>${d.uf}</td>
-        <td style="font-size:11px">${d.tipo}</td>
-        <td>${fmt(d.fat)}</td>
-        <td>${d.transp ? `<span class="badge badge-transp">${d.transp}</span>` : '—'}</td>
-        <td><span class="badge badge-pend">⚠ Preencher frete</span></td>
-      </tr>`).join('')
-    : `<tr><td colspan="10" class="tbl-empty">Nenhuma pendência encontrada.</td></tr>`;
-  renderPag('pag-pend', total, paginaAtual.pend, pg => { paginaAtual.pend = pg; renderPend(); });
-}
-
-// ═══════════════════════════════════════════════════════
-// TRANSPORTADORAS
-// ═══════════════════════════════════════════════════════
-function renderTransportadoras() {
-  const tMap = {};
-  dados.forEach(d => {
-    const k = d.transp || '— Não informada';
-    if (!tMap[k]) tMap[k] = {ok:0, pend:0, na:0, fat:0, frete:0, total:0};
-    tMap[k].total++;
-    tMap[k][d.statusTipo]++;
-    tMap[k].fat += d.fat;
-    tMap[k].frete += d.frete;
+function afterDashboard(){
+  const meses = sortMeses(uniqueSorted(state.data.map(r=>r.mes)));
+  const fatByMes = meses.map(m=> state.data.filter(r=>r.mes===m).reduce((s,r)=>s+(r.fat||0),0));
+  const freteByMes = meses.map(m=> state.data.filter(r=>r.mes===m).reduce((s,r)=>s+(r.frete||0),0));
+  const ctx = document.getElementById('evoChart');
+  if(!ctx) return;
+  if(state.charts.evo) state.charts.evo.destroy();
+  state.charts.evo = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: meses,
+      datasets:[
+        { label:'Faturamento (R$)', data: fatByMes, backgroundColor:'#FFD600', order:2, yAxisID:'y' },
+        { label:'Frete (R$)', data: freteByMes, type:'line', borderColor:'#1A1A1A', backgroundColor:'#1A1A1A', tension:.3, order:1, yAxisID:'y1' },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        y:{ position:'left', ticks:{ callback:(v)=>fmtBRL(v) } },
+        y1:{ position:'right', grid:{drawOnChartArea:false}, ticks:{ callback:(v)=>fmtBRL(v) } }
+      },
+      plugins:{ legend:{position:'bottom'}, tooltip:{ callbacks:{ label:(c)=> c.dataset.label+': '+fmtBRL(c.parsed.y) } } }
+    }
   });
-
-  // KPIs
-  const tKeys = Object.keys(tMap).filter(k => k !== '— Não informada');
-  document.getElementById('transp-kpis').innerHTML = tKeys.slice(0,4).map(k => {
-    const d = tMap[k];
-    const cob = d.total > 0 ? Math.round(d.ok/d.total*100) : 0;
-    return `<div class="kpi ${d.pend > 0 ? 'warn' : 'ok'}">
-      <div class="kpi-val">${fmtN(d.pend)}</div>
-      <div class="kpi-lbl">⚠ ${k} — pendentes</div>
-      <div class="prog" style="margin-top:8px"><div class="prog-fill ${cob>70?'g':''}" style="width:${cob}%"></div></div>
-      <div style="font-size:10px;color:#888;margin-top:3px">${cob}% concluído</div>
-    </div>`;
-  }).join('');
-
-  // Tabela
-  document.getElementById('tab-transp').innerHTML = Object.entries(tMap)
-    .sort((a,b) => b[1].fat - a[1].fat)
-    .map(([n,d]) => {
-      const pct = d.fat > 0 ? (d.frete/d.fat*100).toFixed(2) : '0.00';
-      const cob = d.total > 0 ? Math.round(d.ok/d.total*100) : 0;
-      return `<tr>
-        <td><b>${n}</b></td>
-        <td>${fmtN(d.total)}</td>
-        <td style="color:#0F6E56"><b>${fmtN(d.ok)}</b></td>
-        <td style="color:#BA7517"><b>${fmtN(d.pend)}</b></td>
-        <td style="color:#888">${fmtN(d.na)}</td>
-        <td>${fmt(d.fat)}</td>
-        <td>${d.frete > 0 ? fmt(d.frete) : '—'}</td>
-        <td>${pct}%</td>
-        <td style="min-width:100px">
-          <div style="font-size:10px;margin-bottom:3px">${cob}%</div>
-          <div class="prog"><div class="prog-fill ${cob>70?'g':''}" style="width:${cob}%"></div></div>
-        </td>
-      </tr>`;
-    }).join('');
+}
+function groupByTransportadora(data){
+  const map = {};
+  data.forEach(r=>{
+    const k = r.transportadora || '— Não informada';
+    if(!map[k]) map[k] = { nome:k, count:0, fat:0, frete:0, pendentes:0 };
+    map[k].count++;
+    map[k].fat += (r.fat||0);
+    map[k].frete += (r.frete||0);
+    if(r.status==='⚠ Preencher') map[k].pendentes++;
+  });
+  return Object.values(map).sort((a,b)=> b.fat-a.fat);
+}
+function escJs(s){ return String(s).replace(/'/g,"\\'"); }
+function openTransportadora(nome){
+  state.transp.selected = nome;
+  state.transp.page = 1;
+  navigate('transportadoras');
 }
 
-function renderDetTransp() {
-  const t = document.getElementById('f-det-transp')?.value || '';
-  const m = document.getElementById('f-det-mes')?.value || '';
-  if (!t) { document.getElementById('tab-det-transp').innerHTML = '<tr><td colspan="8" class="tbl-empty">Selecione uma transportadora.</td></tr>'; return; }
-  const lista = dados.filter(d => d.transp === t && (!m || d.mes === m));
-  document.getElementById('tab-det-transp').innerHTML = lista.slice(0,200).map(d => `<tr>
-    <td><span class="mes-tag">${d.mes}</span></td>
-    <td><b>${d.nf}</b></td><td>${d.parceiro}</td><td>${d.cidade}</td><td>${d.uf}</td>
-    <td>${fmt(d.fat)}</td>
-    <td>${d.frete > 0 ? fmt(d.frete) : '—'}</td>
-    <td><span class="badge ${d.statusTipo==='ok'?'badge-ok':'badge-pend'}">${d.statusTipo==='ok'?'✔ OK':'⚠ Pendente'}</span></td>
-  </tr>`).join('') || '<tr><td colspan="8" class="tbl-empty">Nenhum resultado.</td></tr>';
+/* ============================================================
+   TABELA GENÉRICA (usada em várias telas)
+============================================================ */
+function tableRows(rows, page, pageSize){
+  const start = (page-1)*pageSize;
+  return rows.slice(start, start+pageSize);
 }
-
-// ═══════════════════════════════════════════════════════
-// CONCILIAÇÃO
-// ═══════════════════════════════════════════════════════
-function filtrarConc() {
-  const t = document.getElementById('f-conc-transp')?.value || '';
-  const m = document.getElementById('f-conc-mes')?.value || '';
-  const lista = dados.filter(d => d.statusTipo === 'pend' && (!t || d.transp === t) && (!m || d.mes === m));
-  document.getElementById('tab-conc-pend').innerHTML = lista.slice(0,200).map(d => `<tr>
-    <td><span class="mes-tag">${d.mes}</span></td>
-    <td><b>${d.nf}</b></td><td>${d.parceiro}</td><td>${d.cidade}</td><td>${d.uf}</td>
-    <td>${fmt(d.fat)}</td>
-    <td>${d.transp ? `<span class="badge badge-transp">${d.transp}</span>` : '—'}</td>
-    <td><span class="badge badge-pend">⚠ Pendente</span></td>
-  </tr>`).join('') || '<tr><td colspan="8" class="tbl-empty">Nenhuma pendência.</td></tr>';
-}
-
-// ═══════════════════════════════════════════════════════
-// POR MÊS
-// ═══════════════════════════════════════════════════════
-let mesSelecionado = '';
-function renderResumoMes() {
-  const m = document.getElementById('f-rm-mes')?.value || '';
-  const meses = uniq(dados.map(d => d.mes).filter(Boolean));
-  document.getElementById('tab-rm').innerHTML = meses.map(mes => {
-    const g   = dados.filter(d => d.mes === mes);
-    const gOk = g.filter(d => d.statusTipo === 'ok').length;
-    const gPe = g.filter(d => d.statusTipo === 'pend').length;
-    const gNa = g.filter(d => d.statusTipo === 'na').length;
-    const gFat = g.reduce((s,d) => s+d.fat, 0);
-    const gFre = g.reduce((s,d) => s+d.frete, 0);
-    const pct  = gFat > 0 ? (gFre/gFat*100) : 0;
-    const cob  = g.length > 0 ? Math.round(gOk/g.length*100) : 0;
-    const sel  = (!m || m === mes);
-    return `<tr style="cursor:pointer;${sel?'background:#FFFDE7':''}" onclick="selecionarMes('${mes}')">
-      <td><span class="mes-tag">${mes}</span></td>
-      <td><b>${fmtN(g.length)}</b></td>
-      <td style="color:#0F6E56"><b>${fmtN(gOk)}</b></td>
-      <td style="color:#BA7517"><b>${fmtN(gPe)}</b></td>
-      <td style="color:#888">${fmtN(gNa)}</td>
-      <td>${fmt(gFat)}</td>
-      <td>${gFre > 0 ? fmt(gFre) : '—'}</td>
-      <td>${pct > 0 ? pct.toFixed(2)+'%' : '—'}</td>
-      <td style="min-width:100px">
-        <div style="font-size:10px;margin-bottom:3px">${cob}%</div>
-        <div class="prog"><div class="prog-fill ${cob>70?'g':''}" style="width:${cob}%"></div></div>
-      </td>
-    </tr>`;
-  }).join('');
-  if (mesSelecionado) filtrarRM();
-}
-
-function selecionarMes(m) {
-  mesSelecionado = m;
-  document.getElementById('rm-detail-title').textContent = `Detalhamento — ${m}`;
-  filtrarRM();
-}
-
-function filtrarRM() {
-  if (!mesSelecionado) return;
-  const q = (document.getElementById('s-rm')?.value || '').toLowerCase();
-  const s = document.getElementById('f-rm-status')?.value || '';
-  const lista = dados.filter(d =>
-    d.mes === mesSelecionado &&
-    (!q || d.nf.toLowerCase().includes(q) || d.parceiro.toLowerCase().includes(q)) &&
-    (!s || d.statusTipo === s)
-  );
-  document.getElementById('tab-rm-detail').innerHTML = lista.slice(0,300).map(d => `<tr>
-    <td><b>${d.nf}</b></td>
-    <td style="font-size:11px;color:#666">${d.empresa}</td>
-    <td>${d.parceiro}</td><td>${d.cidade}</td><td>${d.uf}</td>
-    <td>${fmt(d.fat)}</td>
-    <td>${d.transp ? `<span class="badge badge-transp">${d.transp}</span>` : '—'}</td>
-    <td>${d.frete > 0 ? fmt(d.frete) : '—'}</td>
-    <td><span class="badge ${d.statusTipo==='ok'?'badge-ok':'badge-pend'}">${d.statusTipo==='ok'?'✔ OK':'⚠ Pendente'}</span></td>
-  </tr>`).join('') || '<tr><td colspan="9" class="tbl-empty">Nenhum resultado.</td></tr>';
-}
-
-// ═══════════════════════════════════════════════════════
-// PAGINAÇÃO
-// ═══════════════════════════════════════════════════════
-function renderPag(id, total, atual, cb) {
-  const totalPag = Math.ceil(total / POR_PAGINA);
-  if (totalPag <= 1) { document.getElementById(id).innerHTML = `<span>${fmtN(total)} registros</span><span></span>`; return; }
-  const ini = Math.max(1, atual - 2);
-  const fim = Math.min(totalPag, ini + 4);
+function paginationHtml(total, page, pageSize, fnName){
+  const pages = Math.max(1, Math.ceil(total/pageSize));
+  const start = total===0? 0 : (page-1)*pageSize+1;
+  const end = Math.min(total, page*pageSize);
   let btns = '';
-  for (let p = ini; p <= fim; p++) {
-    btns += `<button class="pag-btn ${p===atual?'active':''}" onclick="(${cb})(${p})">${p}</button>`;
+  const maxBtns = 7;
+  let from = Math.max(1, page-3), to = Math.min(pages, from+maxBtns-1);
+  from = Math.max(1, to-maxBtns+1);
+  for(let p=from;p<=to;p++){
+    btns += `<button class="${p===page?'active':''}" onclick="${fnName}(${p})">${p}</button>`;
   }
-  document.getElementById(id).innerHTML = `
-    <span>${fmtN(total)} registros — pág. ${atual} de ${totalPag}</span>
-    <div class="pag-btns">
-      <button class="pag-btn" onclick="(${cb})(${atual-1})" ${atual<=1?'disabled':''}>‹</button>
-      ${btns}
-      <button class="pag-btn" onclick="(${cb})(${atual+1})" ${atual>=totalPag?'disabled':''}>›</button>
+  return `
+    <div class="pagination">
+      <span>${start}–${end} de ${total}</span>
+      <div class="pages">
+        <button onclick="${fnName}(${page-1})" ${page<=1?'disabled':''}>‹</button>
+        ${btns}
+        <button onclick="${fnName}(${page+1})" ${page>=pages?'disabled':''}>›</button>
+      </div>
     </div>`;
 }
+function renderNFTableBody(rows){
+  return rows.map((r,i)=>`
+    <tr onclick='openModal(${r.__idx})'>
+      <td>${esc(r.mes)}</td>
+      <td>${esc(r.nf)}</td>
+      <td>${esc(r.parceiro)}</td>
+      <td>${esc(r.cidade)}/${esc(r.uf)}</td>
+      <td>${esc(r.transportadora)}</td>
+      <td>${fmtBRL(r.fat)}</td>
+      <td>${fmtBRL(r.frete)}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${esc(r.regiao)}</td>
+    </tr>`).join('');
+}
+const TABLE_HEAD = `<tr><th>Mês</th><th>Nº NF</th><th>Parceiro</th><th>Cidade/UF</th><th>Transportadora</th><th>Fat. (R$)</th><th>Frete (R$)</th><th>Status</th><th>Região</th></tr>`;
 
-// ═══════════════════════════════════════════════════════
-// UTILITÁRIOS
-// ═══════════════════════════════════════════════════════
-const fmt  = v => 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtN = v => (v||0).toLocaleString('pt-BR');
-const uniq = arr => [...new Set(arr)];
+/* ============================================================
+   TELA 3 — MASTER NFs
+============================================================ */
+function withIdx(rows){
+  return rows.map(r=>({...r, __idx: state.data.indexOf(r)}));
+}
+function applyMasterFilters(){
+  const f = state.master;
+  let rows = withIdx(state.data);
+  if(f.search){
+    const s = f.search.toLowerCase();
+    rows = rows.filter(r => String(r.nf).includes(s) || (r.parceiro||'').toLowerCase().includes(s) || (r.cidade||'').toLowerCase().includes(s));
+  }
+  if(f.mes) rows = rows.filter(r=>r.mes===f.mes);
+  if(f.status) rows = rows.filter(r=>r.status===f.status);
+  if(f.transportadora) rows = rows.filter(r=>r.transportadora===f.transportadora);
+  if(f.uf) rows = rows.filter(r=>r.uf===f.uf);
+  if(f.regiao) rows = rows.filter(r=>r.regiao===f.regiao);
+  return rows;
+}
+function tplMaster(){
+  const f = state.master;
+  const rows = applyMasterFilters();
+  const pageRows = tableRows(rows, f.page, f.pageSize);
+  const meses = sortMeses(uniqueSorted(state.data.map(r=>r.mes)));
+  const statuses = uniqueSorted(state.data.map(r=>r.status));
+  const transps = uniqueSorted(state.data.map(r=>r.transportadora));
+  const ufs = uniqueSorted(state.data.map(r=>r.uf));
 
-function mostrarLoading(msg) {
-  document.getElementById('loading').style.display = 'flex';
-  document.getElementById('loading-msg').textContent = msg || 'Processando...';
+  return `
+    <h1 class="page-title">Master NFs</h1>
+    <p class="page-sub">${fmtNum(rows.length)} notas encontradas de ${fmtNum(state.data.length)} totais.</p>
+    <div class="filters">
+      <input type="text" placeholder="Buscar NF, parceiro ou cidade..." value="${esc(f.search)}" oninput="setMasterFilter('search', this.value)">
+      <select onchange="setMasterFilter('mes', this.value)">
+        <option value="">Todos os meses</option>
+        ${meses.map(m=>`<option value="${m}" ${f.mes===m?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <select onchange="setMasterFilter('status', this.value)">
+        <option value="">Todos os status</option>
+        ${statuses.map(s=>`<option value="${esc(s)}" ${f.status===s?'selected':''}>${esc(s)}</option>`).join('')}
+      </select>
+      <select onchange="setMasterFilter('transportadora', this.value)">
+        <option value="">Todas transportadoras</option>
+        ${transps.map(t=>`<option value="${esc(t)}" ${f.transportadora===t?'selected':''}>${esc(t)}</option>`).join('')}
+      </select>
+      <select onchange="setMasterFilter('uf', this.value)">
+        <option value="">Todas UFs</option>
+        ${ufs.map(u=>`<option value="${u}" ${f.uf===u?'selected':''}>${u}</option>`).join('')}
+      </select>
+      <select onchange="setMasterFilter('regiao', this.value)">
+        <option value="">Todas regiões</option>
+        ${REGIOES.map(r=>`<option value="${r}" ${f.regiao===r?'selected':''}>${r}</option>`).join('')}
+      </select>
+      <button class="clear" onclick="clearMasterFilters()">Limpar filtros</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead>${TABLE_HEAD}</thead><tbody>${renderNFTableBody(pageRows)}</tbody></table>
+      ${paginationHtml(rows.length, f.page, f.pageSize, 'setMasterPage')}
+    </div>
+  `;
 }
-function esconderLoading() {
-  document.getElementById('loading').style.display = 'none';
+function setMasterFilter(key, val){ state.master[key]=val; state.master.page=1; renderContent(); }
+function clearMasterFilters(){ state.master = {...state.master, search:'', mes:'', status:'', transportadora:'', uf:'', regiao:'', page:1}; renderContent(); }
+function setMasterPage(p){ state.master.page = Math.max(1,p); renderContent(); }
+
+/* ============================================================
+   TELA 4 — PENDÊNCIAS
+============================================================ */
+function applyPendFilters(){
+  const f = state.pend;
+  let rows = withIdx(state.data).filter(r=>r.status==='⚠ Preencher');
+  if(f.mes) rows = rows.filter(r=>r.mes===f.mes);
+  if(f.transportadora) rows = rows.filter(r=>r.transportadora===f.transportadora);
+  if(f.uf) rows = rows.filter(r=>r.uf===f.uf);
+  return rows;
 }
-function fecharModal(id) {
-  document.getElementById(id).classList.add('hidden');
+function tplPendencias(){
+  const f = state.pend;
+  const rows = applyPendFilters();
+  const pageRows = tableRows(rows, f.page, f.pageSize);
+  const meses = sortMeses(uniqueSorted(state.data.map(r=>r.mes)));
+  const transps = uniqueSorted(state.data.filter(r=>r.status==='⚠ Preencher').map(r=>r.transportadora));
+  const ufs = uniqueSorted(state.data.filter(r=>r.status==='⚠ Preencher').map(r=>r.uf));
+  const total = state.data.filter(r=>r.status==='⚠ Preencher').length;
+
+  return `
+    <h1 class="page-title">Pendências</h1>
+    <p class="page-sub">${fmtNum(total)} NFs marcadas como <b>⚠ Preencher</b>.</p>
+    <div class="filters">
+      <select onchange="setPendFilter('mes', this.value)">
+        <option value="">Todos os meses</option>
+        ${meses.map(m=>`<option value="${m}" ${f.mes===m?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <select onchange="setPendFilter('transportadora', this.value)">
+        <option value="">Todas transportadoras</option>
+        ${transps.map(t=>`<option value="${esc(t)}" ${f.transportadora===t?'selected':''}>${esc(t)}</option>`).join('')}
+      </select>
+      <select onchange="setPendFilter('uf', this.value)">
+        <option value="">Todas UFs</option>
+        ${ufs.map(u=>`<option value="${u}" ${f.uf===u?'selected':''}>${u}</option>`).join('')}
+      </select>
+      <button class="clear" onclick="clearPendFilters()">Limpar filtros</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Mês</th><th>Nº NF</th><th>Parceiro</th><th>Cidade/UF</th><th>Transportadora</th><th>Fat. (R$)</th><th>Pendência</th><th>Região</th></tr></thead>
+      <tbody>${pageRows.map(r=>`
+        <tr onclick='openModal(${r.__idx})'>
+          <td>${esc(r.mes)}</td><td>${esc(r.nf)}</td><td>${esc(r.parceiro)}</td>
+          <td>${esc(r.cidade)}/${esc(r.uf)}</td><td>${esc(r.transportadora)}</td>
+          <td>${fmtBRL(r.fat)}</td><td><span class="badge badge-warn">${esc(r.pendencia)}</span></td><td>${esc(r.regiao)}</td>
+        </tr>`).join('')}</tbody></table>
+      ${paginationHtml(rows.length, f.page, f.pageSize, 'setPendPage')}
+    </div>
+  `;
 }
-function toast(msg, tipo) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.style.borderLeftColor = tipo === 'erro' ? '#C00000' : '#FFD600';
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3500);
+function setPendFilter(key, val){ state.pend[key]=val; state.pend.page=1; renderContent(); }
+function clearPendFilters(){ state.pend = {...state.pend, mes:'', transportadora:'', uf:'', page:1}; renderContent(); }
+function setPendPage(p){ state.pend.page = Math.max(1,p); renderContent(); }
+
+/* ============================================================
+   TELA 5 — TRANSPORTADORAS
+============================================================ */
+function tplTransportadoras(){
+  const groups = groupByTransportadora(state.data);
+  if(state.transp.selected){
+    return tplTransportadoraDetail(state.transp.selected, groups);
+  }
+  return `
+    <h1 class="page-title">Transportadoras</h1>
+    <p class="page-sub">${groups.length} transportadoras identificadas. Clique em um card para ver o detalhamento.</p>
+    <div class="grid grid-3">
+      ${groups.map(t=>`
+        <div class="card tcard" onclick="openTransportadora('${escJs(t.nome)}')">
+          <div class="name">${esc(t.nome)}</div>
+          <div class="row"><span>NFs</span><b>${fmtNum(t.count)}</b></div>
+          <div class="row"><span>Faturamento</span><b>${fmtBRL(t.fat)}</b></div>
+          <div class="row"><span>Frete</span><b>${fmtBRL(t.frete)}</b></div>
+          <div class="row"><span>Pendentes</span><b>${fmtNum(t.pendentes)}</b></div>
+        </div>`).join('')}
+    </div>
+  `;
 }
-document.getElementById('modal-nf').addEventListener('click', e => {
-  if (e.target === document.getElementById('modal-nf')) fecharModal('modal-nf');
+function tplTransportadoraDetail(nome, groups){
+  const g = groups.find(x=>x.nome===nome) || {count:0,fat:0,frete:0,pendentes:0};
+  const f = state.transp;
+  const rows = withIdx(state.data).filter(r=>(r.transportadora||'— Não informada')===nome);
+  const pageRows = tableRows(rows, f.page, f.pageSize);
+  return `
+    <button class="btn btn-outline btn-sm" style="margin-bottom:14px;" onclick="backToTransportadoras()">← Voltar</button>
+    <h1 class="page-title">${esc(nome)}</h1>
+    <p class="page-sub">Detalhamento completo da transportadora.</p>
+    <div class="grid grid-4 section">
+      <div class="card kpi"><div class="label">NFs</div><div class="value">${fmtNum(g.count)}</div></div>
+      <div class="card kpi"><div class="label">Faturamento</div><div class="value" style="font-size:19px;">${fmtBRL(g.fat)}</div></div>
+      <div class="card kpi"><div class="label">Frete</div><div class="value" style="font-size:19px;">${fmtBRL(g.frete)}</div></div>
+      <div class="card kpi"><div class="label">Pendentes</div><div class="value">${fmtNum(g.pendentes)}</div></div>
+    </div>
+    <div class="table-wrap">
+      <table><thead>${TABLE_HEAD}</thead><tbody>${renderNFTableBody(pageRows)}</tbody></table>
+      ${paginationHtml(rows.length, f.page, f.pageSize, 'setTranspPage')}
+    </div>
+  `;
+}
+function backToTransportadoras(){ state.transp.selected=null; renderContent(); }
+function setTranspPage(p){ state.transp.page = Math.max(1,p); renderContent(); }
+
+/* ============================================================
+   TELA 6 — CONCILIAÇÃO
+============================================================ */
+function tplConciliacao(){
+  const d = state.data;
+  const conciliadas = d.filter(isConciliada);
+  const pendentes = d.filter(isPendente);
+  const divergencias = d.filter(isDivergencia);
+  const naoAplica = d.filter(isNaoAplica);
+
+  return `
+    <h1 class="page-title">Conciliação</h1>
+    <p class="page-sub">Situação de conciliação de frete das NFs.</p>
+    <div class="grid grid-4 section">
+      <div class="card kpi"><div class="label">Conciliadas</div><div class="value" style="color:var(--ok)">${fmtNum(conciliadas.length)}</div></div>
+      <div class="card kpi"><div class="label">Pendentes</div><div class="value" style="color:var(--warn)">${fmtNum(pendentes.length)}</div></div>
+      <div class="card kpi"><div class="label">Divergências</div><div class="value" style="color:var(--danger)">${fmtNum(divergencias.length)}</div></div>
+      <div class="card kpi"><div class="label">Não Aplica</div><div class="value" style="color:var(--muted)">${fmtNum(naoAplica.length)}</div></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>Divergências (status e pendência inconsistentes)</h3></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Mês</th><th>Nº NF</th><th>Parceiro</th><th>Transportadora</th><th>Status</th><th>Pendência</th></tr></thead>
+        <tbody>${withIdx(divergencias).slice(0,200).map(r=>`
+          <tr onclick='openModal(${r.__idx})'>
+            <td>${esc(r.mes)}</td><td>${esc(r.nf)}</td><td>${esc(r.parceiro)}</td>
+            <td>${esc(r.transportadora)}</td><td>${statusBadge(r.status)}</td><td>${esc(r.pendencia)||'—'}</td>
+          </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px;">Nenhuma divergência encontrada</td></tr>`}</tbody></table>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   TELA 7 — POR MÊS
+============================================================ */
+function tplPorMes(){
+  const meses = sortMeses(uniqueSorted(state.data.map(r=>r.mes)));
+  const sel = state.mes.selected;
+  const summary = meses.map(m=>{
+    const rows = state.data.filter(r=>r.mes===m);
+    return { mes:m, count:rows.length, fat: rows.reduce((s,r)=>s+(r.fat||0),0), frete: rows.reduce((s,r)=>s+(r.frete||0),0), pend: rows.filter(r=>r.status==='⚠ Preencher').length };
+  });
+  let detail = '';
+  if(sel){
+    const rows = withIdx(state.data).filter(r=>r.mes===sel);
+    detail = `
+      <div class="section">
+        <div class="section-head"><h3>Detalhamento — ${esc(sel)}</h3></div>
+        <div class="table-wrap">
+          <table><thead>${TABLE_HEAD}</thead><tbody>${renderNFTableBody(rows.slice(0,500))}</tbody></table>
+        </div>
+      </div>`;
+  }
+  return `
+    <h1 class="page-title">Por Mês</h1>
+    <p class="page-sub">Clique em um mês para ver o detalhamento.</p>
+    <div class="grid grid-3 section">
+      ${summary.map(s=>`
+        <div class="card pickcard ${sel===s.mes?'selected':''}" onclick="selectMes('${s.mes}')">
+          <div class="top"><span class="name">${esc(s.mes)}</span><span class="chip">${fmtNum(s.count)} NFs</span></div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Faturamento</span><b style="color:var(--text)">${fmtBRL(s.fat)}</b></div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Frete</span><b style="color:var(--text)">${fmtBRL(s.frete)}</b></div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Pendentes</span><b style="color:var(--text)">${fmtNum(s.pend)}</b></div>
+        </div>`).join('')}
+    </div>
+    ${detail}
+  `;
+}
+function selectMes(m){ state.mes.selected = (state.mes.selected===m) ? null : m; renderContent(); }
+
+/* ============================================================
+   TELA 9 — FILTRO POR REGIÃO
+============================================================ */
+function tplRegiao(){
+  const sel = state.regiao.selected;
+  const summary = REGIOES.map(r=>{
+    const rows = state.data.filter(x=>x.regiao===r);
+    return { regiao:r, count:rows.length, fat: rows.reduce((s,x)=>s+(x.fat||0),0), frete: rows.reduce((s,x)=>s+(x.frete||0),0), pend: rows.filter(x=>x.status==='⚠ Preencher').length };
+  });
+  let detail = '';
+  if(sel){
+    const rows = withIdx(state.data).filter(r=>r.regiao===sel);
+    detail = `
+      <div class="section">
+        <div class="section-head"><h3>Detalhamento — ${esc(sel)}</h3></div>
+        <div class="table-wrap">
+          <table><thead>${TABLE_HEAD}</thead><tbody>${renderNFTableBody(rows.slice(0,500))}</tbody></table>
+        </div>
+      </div>`;
+  }
+  return `
+    <h1 class="page-title">Filtro por Região</h1>
+    <p class="page-sub">Clique em uma região para ver o detalhamento.</p>
+    <div class="grid grid-5 section">
+      ${summary.map(s=>`
+        <div class="card pickcard ${sel===s.regiao?'selected':''}" onclick="selectRegiao('${s.regiao}')">
+          <div class="top"><span class="name">${esc(s.regiao)}</span></div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>NFs</span><b style="color:var(--text)">${fmtNum(s.count)}</b></div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Fat.</span><b style="color:var(--text)">${fmtBRL(s.fat)}</b></div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Pendentes</span><b style="color:var(--text)">${fmtNum(s.pend)}</b></div>
+        </div>`).join('')}
+    </div>
+    ${detail}
+  `;
+}
+function selectRegiao(r){ state.regiao.selected = (state.regiao.selected===r) ? null : r; renderContent(); }
+
+/* ============================================================
+   TELA 8 — DETALHE DA NF (MODAL)
+============================================================ */
+function openModal(idx){
+  const r = state.data[idx];
+  if(!r) return;
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <h3>NF ${esc(r.nf)}</h3>
+      <button class="close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-field"><div class="l">Mês / Trimestre</div><div class="v">${esc(r.mes)} · ${esc(r.trim)}</div></div>
+        <div class="modal-field"><div class="l">Status</div><div class="v">${statusBadge(r.status)}</div></div>
+        <div class="modal-field"><div class="l">Empresa</div><div class="v">${esc(r.empresa)}</div></div>
+        <div class="modal-field"><div class="l">Parceiro</div><div class="v">${esc(r.parceiro)}</div></div>
+        <div class="modal-field"><div class="l">Cidade / UF</div><div class="v">${esc(r.cidade)} / ${esc(r.uf)}</div></div>
+        <div class="modal-field"><div class="l">Região</div><div class="v">${esc(r.regiao)}</div></div>
+        <div class="modal-field"><div class="l">Tipo</div><div class="v">${esc(r.tipo)}</div></div>
+        <div class="modal-field"><div class="l">Transportadora</div><div class="v">${esc(r.transportadora)}</div></div>
+        <div class="modal-field"><div class="l">Faturamento</div><div class="v">${fmtBRL(r.fat)}</div></div>
+        <div class="modal-field"><div class="l">Frete</div><div class="v">${fmtBRL(r.frete)}</div></div>
+        <div class="modal-field" style="grid-column:1/-1;"><div class="l">Pendência</div><div class="v">${esc(r.pendencia)||'—'}</div></div>
+      </div>
+    </div>
+  `;
+  overlay.classList.remove('hidden');
+}
+function closeModal(){
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+document.getElementById('modal-overlay').addEventListener('click', function(e){
+  if(e.target===this) closeModal();
 });
+
+/* ============================================================
+   INIT
+============================================================ */
+renderNav();
+renderContent();
 </script>
 </body>
 </html>
