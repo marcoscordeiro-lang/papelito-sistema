@@ -57,6 +57,13 @@ body{
 #sidebar .logo .title{font-weight:800;font-size:17px;letter-spacing:.3px;}
 #sidebar .logo .sub{font-size:11px;color:#999;margin-top:2px;}
 #sidebar nav{padding:14px 10px;flex:1;}
+.mode-switch{display:flex;flex-direction:column;gap:6px;padding:4px 2px 14px 2px;margin-bottom:10px;border-bottom:1px solid #333;}
+.mode-btn{
+  background:#222;border:1px solid #3a3a3a;color:#bbb;padding:9px 10px;border-radius:8px;
+  font-size:12px;font-weight:700;cursor:pointer;text-align:left;
+}
+.mode-btn.active{background:var(--yellow);color:var(--black);border-color:var(--yellow);}
+.mode-btn:hover:not(.active){background:#2c2c2c;color:#fff;}
 .nav-btn{
   display:flex;align-items:center;gap:10px;
   width:100%;text-align:left;
@@ -81,6 +88,7 @@ body{
 
 /* CARDS / KPI */
 .grid{display:grid;gap:16px;}
+.grid-2{grid-template-columns:repeat(2,1fr);}
 .grid-4{grid-template-columns:repeat(4,1fr);}
 .grid-3{grid-template-columns:repeat(3,1fr);}
 .grid-5{grid-template-columns:repeat(5,1fr);}
@@ -187,6 +195,17 @@ tbody tr:hover{background:#FFFBEA;}
 .pickcard .top .chip{background:var(--black);color:var(--yellow);font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;}
 
 .empty-state{padding:60px 20px;text-align:center;color:var(--muted);}
+.meta-card{border-radius:14px;padding:22px 24px;color:#fff;position:relative;overflow:hidden;}
+.meta-card.dentro{background:linear-gradient(135deg,#1A1A1A,#233d2b);}
+.meta-card.fora{background:linear-gradient(135deg,#1A1A1A,#4a2323);}
+.meta-card .mc-label{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:#bbb;font-weight:700;}
+.meta-card .mc-value{font-size:34px;font-weight:800;margin:8px 0 4px;}
+.meta-card .mc-meta{font-size:12.5px;color:#ccc;}
+.meta-card .mc-tag{display:inline-block;margin-top:10px;padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:800;letter-spacing:.3px;}
+.meta-card.dentro .mc-tag{background:#2E7D32;color:#fff;}
+.meta-card.fora .mc-tag{background:#C0392B;color:#fff;}
+.meta-card .mc-empty{font-size:13px;color:#999;margin-top:10px;}
+.meta-card .mc-empty a{color:var(--yellow);cursor:pointer;text-decoration:underline;}
 .stat-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--muted);gap:8px;padding:2px 0;}
 .stat-row b{color:var(--text);white-space:nowrap;text-align:right;}
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;height:320px;}
@@ -219,17 +238,29 @@ tbody tr:hover{background:#FFFBEA;}
 ============================================================ */
 const state = {
   data: [],
+  mode: 'cliente', // 'cliente' | 'fabrica'
   screen: 'upload',
   master: { search:'', mes:'', status:'', transportadora:'', uf:'', regiao:'', page:1, pageSize:25 },
   pend:   { mes:'', transportadora:'', uf:'', page:1, pageSize:25 },
   transp: { selected:null, page:1, pageSize:25 },
   mes:    { selected:null },
   regiao: { selected:null },
-  charts: {}
+  charts: {},
+  fabrica: {
+    data: [],
+    screen: 'uploadFabrica',
+    master: { search:'', mes:'', transportadora:'', page:1, pageSize:25 },
+    entregaSelecionada: null,
+    mes: { selected:null }
+  }
 };
 
 const MES_ORDER = { Jan:1, Fev:2, Mar:3, Abr:4, Mai:5, Jun:6, Jul:7, Ago:8, Set:9, Out:10, Nov:11, Dez:12 };
+const MES_NOMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const REGIOES = ['Norte','Nordeste','Centro-Oeste','Sudeste','Sul'];
+const ALLOWED_TIPOS = ['VENDA','BONIFICACAO']; // análise considera só Venda e Bonificação (combinado com o Marcos)
+const META_CLIENTE = 2;   // meta % Frete/Faturamento — venda cliente final
+const META_FABRICA = 3;   // meta % Frete/Valor NF — venda entre empresas (fábrica)
 
 const SCREENS = [
   { id:'upload',        label:'Upload',          n:1 },
@@ -240,6 +271,14 @@ const SCREENS = [
   { id:'conciliacao',   label:'Conciliação',      n:6 },
   { id:'porMes',        label:'Por Mês',          n:7 },
   { id:'regiao',        label:'Filtro Região',    n:9 },
+];
+
+const FABRICA_SCREENS = [
+  { id:'uploadFabrica',    label:'Upload',        n:1 },
+  { id:'dashboardFabrica', label:'Dashboard',     n:2 },
+  { id:'entregasFabrica',  label:'Entregas (NFs)',n:3 },
+  { id:'produtosFabrica',  label:'Por Produto',   n:4 },
+  { id:'porMesFabrica',    label:'Por Mês',       n:5 },
 ];
 
 /* ============================================================
@@ -271,6 +310,29 @@ function pctFrete(fat, frete){
   if(!fat) return '—';
   return ((frete||0)/fat*100).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
 }
+function pctFreteNum(fat, frete){
+  if(!fat) return null;
+  return (frete||0)/fat*100;
+}
+function metaCard(label, valueNum, valorLabel, metaPct, emptyLinkScreen, emptyLinkMode){
+  if(valueNum===null){
+    return `
+      <div class="card meta-card dentro">
+        <div class="mc-label">${esc(label)}</div>
+        <div class="mc-value" style="font-size:20px;">Sem dados</div>
+        <div class="mc-empty">Carregue o arquivo pra calcular. <a onclick="setMode('${emptyLinkMode}');navigate('${emptyLinkScreen}')">Importar agora →</a></div>
+      </div>`;
+  }
+  const dentro = valueNum <= metaPct;
+  const fmtVal = valueNum.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+  return `
+    <div class="card meta-card ${dentro?'dentro':'fora'}">
+      <div class="mc-label">${esc(label)}</div>
+      <div class="mc-value">${fmtVal}</div>
+      <div class="mc-meta">${esc(valorLabel)} · Meta: até ${metaPct}%</div>
+      <span class="mc-tag">${dentro?'✔ DENTRO DA META':'⚠ FORA DA META'}</span>
+    </div>`;
+}
 function groupByRegiao(data){
   return REGIOES.map(r=>{
     const rows = data.filter(x=>x.regiao===r);
@@ -288,42 +350,71 @@ function groupByTrimestre(data){
 function isConciliada(r){ return (r.status==='✔ Frete OK'||r.status==='✔ Encontrado') && !r.pendencia; }
 function isDivergencia(r){
   const okStatus = (r.status==='✔ Frete OK'||r.status==='✔ Encontrado');
-  const naStatus = r.status==='— Não aplica';
-  return (okStatus && !!r.pendencia) || (naStatus && !!r.pendencia);
+  return okStatus && !!r.pendencia;
 }
 function isPendente(r){ return (r.status==='⚠ Preencher'||r.status==='⏳ Chegada na filial'); }
-function isNaoAplica(r){ return r.status==='— Não aplica' && !r.pendencia; }
+function isNaoAplica(r){ return r.status==='— Não aplica'; }
 
 /* ============================================================
    NAVEGAÇÃO
 ============================================================ */
 function renderNav(){
   const nav = document.getElementById('nav');
-  nav.innerHTML = SCREENS.map(s=>{
-    const disabled = state.data.length===0 && s.id!=='upload';
-    return `<button class="nav-btn ${state.screen===s.id?'active':''}" ${disabled?'disabled':''} onclick="navigate('${s.id}')">
-      <span class="n">${s.n}</span> ${s.label}
-    </button>`;
-  }).join('');
+  const screens = state.mode==='cliente' ? SCREENS : FABRICA_SCREENS;
+  const curScreen = state.mode==='cliente' ? state.screen : state.fabrica.screen;
+  const dataLen = state.mode==='cliente' ? state.data.length : state.fabrica.data.length;
+  const uploadId = state.mode==='cliente' ? 'upload' : 'uploadFabrica';
+  nav.innerHTML = `
+    <div class="mode-switch">
+      <button class="mode-btn ${state.mode==='cliente'?'active':''}" onclick="setMode('cliente')">Vendas Cliente Final</button>
+      <button class="mode-btn ${state.mode==='fabrica'?'active':''}" onclick="setMode('fabrica')">Vendas Fábrica</button>
+    </div>
+    ${screens.map(s=>{
+      const disabled = dataLen===0 && s.id!==uploadId;
+      return `<button class="nav-btn ${curScreen===s.id?'active':''}" ${disabled?'disabled':''} onclick="navigate('${s.id}')">
+        <span class="n">${s.n}</span> ${s.label}
+      </button>`;
+    }).join('')}
+  `;
+}
+function setMode(mode){
+  state.mode = mode;
+  renderNav();
+  renderContent();
 }
 function navigate(screen){
-  if(state.data.length===0 && screen!=='upload') return;
-  state.screen = screen;
+  if(state.mode==='cliente'){
+    if(state.data.length===0 && screen!=='upload') return;
+    state.screen = screen;
+  } else {
+    if(state.fabrica.data.length===0 && screen!=='uploadFabrica') return;
+    state.fabrica.screen = screen;
+  }
   renderNav();
   renderContent();
 }
 
 function renderContent(){
   const c = document.getElementById('content');
-  switch(state.screen){
-    case 'upload': c.innerHTML = tplUpload(); break;
-    case 'dashboard': c.innerHTML = tplDashboard(); afterDashboard(); break;
-    case 'master': c.innerHTML = tplMaster(); break;
-    case 'pendencias': c.innerHTML = tplPendencias(); break;
-    case 'transportadoras': c.innerHTML = tplTransportadoras(); break;
-    case 'conciliacao': c.innerHTML = tplConciliacao(); break;
-    case 'porMes': c.innerHTML = tplPorMes(); break;
-    case 'regiao': c.innerHTML = tplRegiao(); break;
+  if(state.mode==='cliente'){
+    switch(state.screen){
+      case 'upload': c.innerHTML = tplUpload(); break;
+      case 'dashboard': c.innerHTML = tplDashboard(); afterDashboard(); break;
+      case 'master': c.innerHTML = tplMaster(); break;
+      case 'pendencias': c.innerHTML = tplPendencias(); break;
+      case 'transportadoras': c.innerHTML = tplTransportadoras(); break;
+      case 'conciliacao': c.innerHTML = tplConciliacao(); break;
+      case 'porMes': c.innerHTML = tplPorMes(); break;
+      case 'regiao': c.innerHTML = tplRegiao(); break;
+    }
+  } else {
+    switch(state.fabrica.screen){
+      case 'uploadFabrica': c.innerHTML = tplUploadFabrica(); break;
+      case 'dashboardFabrica': c.innerHTML = tplDashboardFabrica(); afterDashboardFabrica(); break;
+      case 'entregasFabrica': c.innerHTML = tplEntregasFabrica(); break;
+      case 'produtosFabrica': c.innerHTML = tplProdutosFabrica(); break;
+      case 'porMesFabrica': c.innerHTML = tplPorMesFabrica(); break;
+    }
   }
 }
 
@@ -384,9 +475,12 @@ function handleFile(file){
         if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma linha de dados encontrada. Verifique o layout do arquivo.</span>';
         return;
       }
-      state.data = parsed;
+      const totalBruto = parsed.length;
+      const dataFiltrada = parsed.filter(r => ALLOWED_TIPOS.includes(r.tipo));
+      const excluidos = totalBruto - dataFiltrada.length;
+      state.data = dataFiltrada;
       resetFilters();
-      if(msg()) msg().innerHTML = `<span style="color:var(--ok)">${parsed.length} NFs carregadas com sucesso!</span>`;
+      if(msg()) msg().innerHTML = `<span style="color:var(--ok)">${dataFiltrada.length} NFs carregadas com sucesso!</span> <span style="color:var(--muted)">(${excluidos} registros de Transferência/Devolução foram desconsiderados da análise — só entram Venda e Bonificação)</span>`;
       renderNav();
       navigate('dashboard');
     }catch(err){
@@ -426,9 +520,23 @@ function tplDashboard(){
   const porRegiao = groupByRegiao(d);
   const porTrim = groupByTrimestre(d);
 
+  const pctCliente = d.length ? pctFreteNum(totalFat, totalFrete) : null;
+  const fd = state.fabrica.data;
+  const fabTotalNF = fd.reduce((s,e)=>s+(e.valorNF||0),0);
+  const fabTotalFrete = fd.reduce((s,e)=>s+(e.frete||0),0);
+  const pctFabrica = fd.length ? pctFreteNum(fabTotalNF, fabTotalFrete) : null;
+
   return `
     <h1 class="page-title">Dashboard</h1>
     <p class="page-sub">Visão geral de faturamento e frete.</p>
+
+    <div class="section">
+      <div class="section-head"><h3>Indicadores Gerais</h3></div>
+      <div class="grid grid-2">
+        ${metaCard('Indicador Venda Cliente Final', pctCliente, `${fmtBRL(totalFrete)} de frete sobre ${fmtBRL(totalFat)}`, META_CLIENTE, 'upload', 'cliente')}
+        ${metaCard('Indicador Venda Entre Empresas (Fábrica)', pctFabrica, fd.length? `${fmtBRL(fabTotalFrete)} de frete sobre ${fmtBRL(fabTotalNF)}` : '', META_FABRICA, 'uploadFabrica', 'fabrica')}
+      </div>
+    </div>
 
     <div class="grid grid-4 section">
       <div class="card kpi"><div class="label">Total de NFs</div><div class="value">${fmtNum(totalNF)}</div><div class="bar"></div></div>
@@ -780,6 +888,19 @@ function tplConciliacao(){
           </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px;">Nenhuma divergência encontrada</td></tr>`}</tbody></table>
       </div>
     </div>
+    <div class="section">
+      <div class="section-head"><h3>Não Aplica (transferências e devoluções)</h3></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:-6px;margin-bottom:12px;">Movimentações de TRANSFERÊNCIA, DEV. VENDA, DEV. TRANSFERÊNCIA e DEV. BONIFICACAO não entram na conciliação de frete de venda, mas o valor de frete/transportadora é exibido quando informado.</p>
+      <div class="table-wrap">
+        <table><thead><tr><th>Mês</th><th>Nº NF</th><th>Parceiro</th><th>Tipo</th><th>Transportadora</th><th>Fat. (R$)</th><th>Frete (R$)</th><th>Pendência</th></tr></thead>
+        <tbody>${withIdx(naoAplica).slice(0,200).map(r=>`
+          <tr onclick='openModal(${r.__idx})'>
+            <td>${esc(r.mes)}</td><td>${esc(r.nf)}</td><td>${esc(r.parceiro)}</td><td>${esc(r.tipo)}</td>
+            <td>${esc(r.transportadora)}</td><td>${fmtBRL(r.fat)}</td><td>${fmtBRL(r.frete)}</td><td>${esc(r.pendencia)||'—'}</td>
+          </tr>`).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px;">Nenhum registro encontrado</td></tr>`}</tbody></table>
+        ${naoAplica.length>200 ? `<div class="pagination"><span>Mostrando 200 de ${fmtNum(naoAplica.length)}. Veja a lista completa na Master NFs filtrando por status "— Não aplica".</span></div>` : ''}
+      </div>
+    </div>
   `;
 }
 
@@ -895,6 +1016,375 @@ function closeModal(){
 document.getElementById('modal-overlay').addEventListener('click', function(e){
   if(e.target===this) closeModal();
 });
+
+/* ============================================================
+   MÓDULO FÁBRICA — VENDA ENTRE EMPRESAS (Rolling Papers → RCS ES)
+============================================================ */
+function parseFabricaSheet(rows){
+  const entregas = [];
+  let i = 0;
+  while(i < rows.length){
+    const row = rows[i] || [];
+    const marker = row[4];
+    if(typeof marker === 'string' && /NF/i.test(marker)){
+      const isTransferencia = /TRANSFEREN/i.test(marker);
+      const isDevolucao = /DEVOLU/i.test(marker);
+      const dateMatch = marker.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      const nfMatch = marker.match(/NF\s*:?\s*([0-9\/\sA-Za-zçÇãõÃÕ]+)/i);
+      let dataISO = null, mes = '';
+      if(dateMatch){
+        const dd=dateMatch[1], mm=dateMatch[2], yy=dateMatch[3];
+        dataISO = `${yy}-${mm}-${dd}`;
+        const mi = parseInt(mm,10)-1;
+        mes = (MES_NOMES[mi]||'?') + '/' + yy.slice(2);
+      }
+      const nf = nfMatch ? nfMatch[1].trim() : marker.trim();
+
+      const headerRow = rows[i+1] || [];
+      const colIndex = {};
+      headerRow.forEach((h,idx)=>{ if(h!==null && h!==undefined && h!=='') colIndex[String(h).trim()] = idx; });
+
+      let j = i+2;
+      const itens = [];
+      let totalRow = null;
+      while(j < rows.length){
+        const r = rows[j] || [];
+        const isBlank = r.every(c => c===null || c===undefined || c==='');
+        if(isBlank){ j++; break; }
+        const codRolling = colIndex['Cod. Rolling']!==undefined ? r[colIndex['Cod. Rolling']] : null;
+        if(codRolling !== null && codRolling !== undefined && codRolling !== ''){
+          itens.push({
+            codRolling: codRolling,
+            codProtheus: colIndex['Cod. Protheus RCS']!==undefined ? r[colIndex['Cod. Protheus RCS']] : null,
+            produto: colIndex['Produtos']!==undefined ? r[colIndex['Produtos']] : null,
+            precoUnit: colIndex['Preço Unitario']!==undefined ? r[colIndex['Preço Unitario']] : null,
+            caixas: colIndex['Caixas']!==undefined ? r[colIndex['Caixas']] : null,
+            livretos: colIndex['Livretos']!==undefined ? r[colIndex['Livretos']] : null,
+            displays: colIndex['Displays']!==undefined ? r[colIndex['Displays']] : null,
+            valorProdutos: colIndex['Valor dos Produtos']!==undefined ? r[colIndex['Valor dos Produtos']] : null,
+          });
+        } else {
+          const peso = colIndex['Peso']!==undefined ? r[colIndex['Peso']] : null;
+          const caixasT = colIndex['Caixas']!==undefined ? r[colIndex['Caixas']] : null;
+          if((typeof peso === 'number') || (typeof caixasT === 'number')){
+            totalRow = r;
+          }
+        }
+        j++;
+      }
+      if(totalRow){
+        const freteVal = colIndex['Valor do Frete']!==undefined ? totalRow[colIndex['Valor do Frete']] : null;
+        entregas.push({
+          nf, data: dataISO, mes, isTransferencia, isDevolucao,
+          peso: colIndex['Peso']!==undefined ? totalRow[colIndex['Peso']] : null,
+          caixas: colIndex['Caixas']!==undefined ? totalRow[colIndex['Caixas']] : null,
+          livretos: colIndex['Livretos']!==undefined ? totalRow[colIndex['Livretos']] : null,
+          displays: colIndex['Displays']!==undefined ? totalRow[colIndex['Displays']] : null,
+          pesoTotal: colIndex['Peso Total']!==undefined ? totalRow[colIndex['Peso Total']] : null,
+          cubagemTotal: colIndex['Cubagem total']!==undefined ? totalRow[colIndex['Cubagem total']] : null,
+          valorProdutos: colIndex['Valor dos Produtos']!==undefined ? totalRow[colIndex['Valor dos Produtos']] : null,
+          valorNF: colIndex['Valor do ICMS']!==undefined ? totalRow[colIndex['Valor do ICMS']] : null,
+          frete: (typeof freteVal === 'number') ? freteVal : null,
+          valorPorLivreto: colIndex['Valor Por Livreto']!==undefined ? totalRow[colIndex['Valor Por Livreto']] : null,
+          transportadora: colIndex['Transportadora']!==undefined ? totalRow[colIndex['Transportadora']] : null,
+          itens
+        });
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return entregas;
+}
+
+function handleFileFabrica(file){
+  if(!file) return;
+  const msg = ()=>document.getElementById('uploadMsgFabrica');
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+      const todas = parseFabricaSheet(rows);
+      const semFrete = todas.filter(en => typeof en.frete !== 'number').length;
+      const transferencias = todas.filter(en => en.isTransferencia && typeof en.frete === 'number').length;
+      const validas = todas.filter(en => typeof en.frete === 'number' && !en.isTransferencia);
+      if(validas.length===0){
+        if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma entrega com Valor de Frete encontrada. Verifique o arquivo.</span>';
+        return;
+      }
+      state.fabrica.data = validas;
+      state.fabrica.master = { search:'', mes:'', transportadora:'', page:1, pageSize:25 };
+      state.fabrica.entregaSelecionada = null;
+      state.fabrica.mes = { selected:null };
+      if(msg()) msg().innerHTML = `<span style="color:var(--ok)">${validas.length} entregas carregadas com sucesso!</span> <span style="color:var(--muted)">(${semFrete} entregas antigas sem Frete e ${transferencias} de Transferência foram desconsideradas)</span>`;
+      renderNav();
+      navigate('dashboardFabrica');
+    }catch(err){
+      console.error(err);
+      if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Erro ao ler o arquivo: '+err.message+'</span>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function tplUploadFabrica(){
+  const loaded = state.fabrica.data.length>0;
+  return `
+    <h1 class="page-title">Importar Entregas entre Empresas (Fábrica → RCS ES)</h1>
+    <p class="page-sub">Envie o arquivo Excel de remessas da fábrica (Rolling Papers). Só entram entregas de 2026 com Frete preenchido.</p>
+    <div class="upload-zone" id="dropzoneFabrica" ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleDropFabrica(event)">
+      <div class="icon">🏭</div>
+      <h2>${loaded ? 'Arquivo carregado com sucesso' : 'Arraste o arquivo aqui'}</h2>
+      <p>${loaded ? state.fabrica.data.length + ' entregas importadas — pode importar outro arquivo para substituir os dados.' : 'ou clique no botão abaixo para selecionar (.xlsx)'}</p>
+      <input type="file" id="fileInputFabrica" accept=".xlsx,.xls" style="display:none" onchange="handleFileFabrica(event.target.files[0])">
+      <button class="btn btn-yellow" onclick="document.getElementById('fileInputFabrica').click()">Selecionar arquivo Excel</button>
+      <div id="uploadMsgFabrica" style="margin-top:14px;font-size:13px;color:var(--muted);"></div>
+    </div>
+    ${loaded ? `<div style="max-width:640px;margin:0 auto;"><button class="btn btn-outline" onclick="navigate('dashboardFabrica')">Ir para o Dashboard →</button></div>` : ''}
+  `;
+}
+function handleDropFabrica(e){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if(file) handleFileFabrica(file);
+}
+
+function groupByTransportadoraFabrica(data){
+  const map = {};
+  data.forEach(e=>{
+    const k = e.transportadora || '— Não informada';
+    if(!map[k]) map[k] = { nome:k, count:0, valorNF:0, frete:0 };
+    map[k].count++;
+    map[k].valorNF += (e.valorNF||0);
+    map[k].frete += (e.frete||0);
+  });
+  return Object.values(map).sort((a,b)=> b.valorNF-a.valorNF);
+}
+function groupByMesFabrica(data){
+  const meses = sortMeses(uniqueSorted(data.map(e=>e.mes)));
+  return meses.map(m=>{
+    const rows = data.filter(e=>e.mes===m);
+    return { mes:m, count:rows.length, valorNF: rows.reduce((s,e)=>s+(e.valorNF||0),0), frete: rows.reduce((s,e)=>s+(e.frete||0),0), pesoTotal: rows.reduce((s,e)=>s+(e.pesoTotal||0),0) };
+  });
+}
+
+function tplDashboardFabrica(){
+  const d = state.fabrica.data;
+  const totalEntregas = d.length;
+  const totalValorNF = d.reduce((s,e)=>s+(e.valorNF||0),0);
+  const totalFrete = d.reduce((s,e)=>s+(e.frete||0),0);
+  const totalPeso = d.reduce((s,e)=>s+(e.pesoTotal||0),0);
+  const totalCaixas = d.reduce((s,e)=>s+(e.caixas||0),0);
+  const pct = pctFreteNum(totalValorNF, totalFrete);
+  const porTransp = groupByTransportadoraFabrica(d);
+
+  return `
+    <h1 class="page-title">Dashboard — Vendas Fábrica</h1>
+    <p class="page-sub">Entregas entre empresas: Rolling Papers → RCS ES.</p>
+
+    <div class="section">
+      ${metaCard('Indicador Venda Entre Empresas', pct, `${fmtBRL(totalFrete)} de frete sobre ${fmtBRL(totalValorNF)}`, META_FABRICA, 'uploadFabrica','fabrica')}
+    </div>
+
+    <div class="grid grid-4 section">
+      <div class="card kpi"><div class="label">Total de Entregas</div><div class="value">${fmtNum(totalEntregas)}</div><div class="bar"></div></div>
+      <div class="card kpi"><div class="label">Valor Total das NFs</div><div class="value" style="font-size:19px;">${fmtBRL(totalValorNF)}</div></div>
+      <div class="card kpi"><div class="label">Frete Total Pago</div><div class="value" style="font-size:19px;">${fmtBRL(totalFrete)}</div></div>
+      <div class="card kpi"><div class="label">Peso Total (kg) / Caixas</div><div class="value" style="font-size:18px;">${fmtNum(Math.round(totalPeso))} kg / ${fmtNum(totalCaixas)}</div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h3>Evolução por Mês</h3></div>
+      <div class="chart-box"><canvas id="evoChartFabrica"></canvas></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h3>Por Transportadora</h3></div>
+      <div class="grid grid-3">
+        ${porTransp.map(t=>`
+          <div class="card">
+            <div class="name" style="font-weight:800;margin-bottom:8px;">${esc(t.nome)}</div>
+            <div class="stat-row"><span>Entregas</span><b>${fmtNum(t.count)}</b></div>
+            <div class="stat-row"><span>Valor NF</span><b>${fmtBRL(t.valorNF)}</b></div>
+            <div class="stat-row"><span>Frete</span><b>${fmtBRL(t.frete)}</b></div>
+            <div class="stat-row"><span>% Frete</span><b style="color:var(--warn)">${pctFrete(t.valorNF,t.frete)}</b></div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+function afterDashboardFabrica(){
+  const porMes = groupByMesFabrica(state.fabrica.data);
+  const ctx = document.getElementById('evoChartFabrica');
+  if(!ctx) return;
+  if(state.charts.evoFabrica) state.charts.evoFabrica.destroy();
+  state.charts.evoFabrica = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: porMes.map(m=>m.mes),
+      datasets:[
+        { label:'Valor NF (R$)', data: porMes.map(m=>m.valorNF), backgroundColor:'#FFD600', order:2, yAxisID:'y' },
+        { label:'Frete (R$)', data: porMes.map(m=>m.frete), type:'line', borderColor:'#1A1A1A', backgroundColor:'#1A1A1A', tension:.3, order:1, yAxisID:'y1' },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        y:{ position:'left', ticks:{ callback:(v)=>fmtBRL(v) } },
+        y1:{ position:'right', grid:{drawOnChartArea:false}, ticks:{ callback:(v)=>fmtBRL(v) } }
+      },
+      plugins:{ legend:{position:'bottom'}, tooltip:{ callbacks:{ label:(c)=> c.dataset.label+': '+fmtBRL(c.parsed.y) } } }
+    }
+  });
+}
+
+function withIdxFabrica(rows){
+  return rows.map(e=>({...e, __idx: state.fabrica.data.indexOf(e)}));
+}
+function applyMasterFabricaFilters(){
+  const f = state.fabrica.master;
+  let rows = withIdxFabrica(state.fabrica.data);
+  if(f.search){
+    const s = f.search.toLowerCase();
+    rows = rows.filter(e => String(e.nf).toLowerCase().includes(s));
+  }
+  if(f.mes) rows = rows.filter(e=>e.mes===f.mes);
+  if(f.transportadora) rows = rows.filter(e=>e.transportadora===f.transportadora);
+  return rows;
+}
+function tplEntregasFabrica(){
+  const f = state.fabrica.master;
+  const rows = applyMasterFabricaFilters();
+  const pageRows = tableRows(rows, f.page, f.pageSize);
+  const meses = sortMeses(uniqueSorted(state.fabrica.data.map(e=>e.mes)));
+  const transps = uniqueSorted(state.fabrica.data.map(e=>e.transportadora));
+
+  return `
+    <h1 class="page-title">Entregas (NFs) — Fábrica</h1>
+    <p class="page-sub">${fmtNum(rows.length)} entregas encontradas de ${fmtNum(state.fabrica.data.length)} totais.</p>
+    <div class="filters">
+      <input type="text" placeholder="Buscar NF..." value="${esc(f.search)}" oninput="setMasterFabricaFilter('search', this.value)">
+      <select onchange="setMasterFabricaFilter('mes', this.value)">
+        <option value="">Todos os meses</option>
+        ${meses.map(m=>`<option value="${m}" ${f.mes===m?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <select onchange="setMasterFabricaFilter('transportadora', this.value)">
+        <option value="">Todas transportadoras</option>
+        ${transps.map(t=>`<option value="${esc(t)}" ${f.transportadora===t?'selected':''}>${esc(t)}</option>`).join('')}
+      </select>
+      <button class="clear" onclick="clearMasterFabricaFilters()">Limpar filtros</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Mês</th><th>NF</th><th>Transportadora</th><th>Valor NF (R$)</th><th>Frete (R$)</th><th>% Frete</th><th>Peso Total</th><th>Caixas</th></tr></thead>
+      <tbody>${pageRows.map(e=>`
+        <tr onclick='openModalFabrica(${e.__idx})'>
+          <td>${esc(e.mes)}</td><td>${esc(e.nf)}</td><td>${esc(e.transportadora)}</td>
+          <td>${fmtBRL(e.valorNF)}</td><td>${fmtBRL(e.frete)}</td><td>${pctFrete(e.valorNF,e.frete)}</td>
+          <td>${e.pesoTotal? fmtNum(Math.round(e.pesoTotal))+' kg':'—'}</td><td>${fmtNum(e.caixas)}</td>
+        </tr>`).join('')}</tbody></table>
+      ${paginationHtml(rows.length, f.page, f.pageSize, 'setMasterFabricaPage')}
+    </div>
+  `;
+}
+function setMasterFabricaFilter(key, val){ state.fabrica.master[key]=val; state.fabrica.master.page=1; renderContent(); }
+function clearMasterFabricaFilters(){ state.fabrica.master = {...state.fabrica.master, search:'', mes:'', transportadora:'', page:1}; renderContent(); }
+function setMasterFabricaPage(p){ state.fabrica.master.page = Math.max(1,p); renderContent(); }
+
+function tplProdutosFabrica(){
+  const map = {};
+  state.fabrica.data.forEach(e=>{
+    (e.itens||[]).forEach(it=>{
+      const k = it.codRolling + ' — ' + (it.produto||'');
+      if(!map[k]) map[k] = { produto: it.produto, cod: it.codRolling, caixas:0, livretos:0, valor:0 };
+      map[k].caixas += (it.caixas||0);
+      map[k].livretos += (it.livretos||0);
+      map[k].valor += (it.valorProdutos||0);
+    });
+  });
+  const list = Object.values(map).sort((a,b)=>b.valor-a.valor);
+  return `
+    <h1 class="page-title">Por Produto — Fábrica</h1>
+    <p class="page-sub">${fmtNum(list.length)} produtos distintos enviados no período.</p>
+    <div class="table-wrap">
+      <table><thead><tr><th>Cód. Rolling</th><th>Produto</th><th>Caixas</th><th>Livretos</th><th>Valor (R$)</th></tr></thead>
+      <tbody>${list.map(p=>`
+        <tr><td>${esc(p.cod)}</td><td>${esc(p.produto)}</td><td>${fmtNum(p.caixas)}</td><td>${fmtNum(p.livretos)}</td><td>${fmtBRL(p.valor)}</td></tr>`).join('')}</tbody></table>
+    </div>
+  `;
+}
+
+function tplPorMesFabrica(){
+  const porMes = groupByMesFabrica(state.fabrica.data);
+  const sel = state.fabrica.mes.selected;
+  let detail = '';
+  if(sel){
+    const rows = withIdxFabrica(state.fabrica.data).filter(e=>e.mes===sel);
+    detail = `
+      <div class="section">
+        <div class="section-head"><h3>Detalhamento — ${esc(sel)}</h3></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>NF</th><th>Transportadora</th><th>Valor NF</th><th>Frete</th><th>% Frete</th></tr></thead>
+          <tbody>${rows.map(e=>`
+            <tr onclick='openModalFabrica(${e.__idx})'>
+              <td>${esc(e.nf)}</td><td>${esc(e.transportadora)}</td><td>${fmtBRL(e.valorNF)}</td><td>${fmtBRL(e.frete)}</td><td>${pctFrete(e.valorNF,e.frete)}</td>
+            </tr>`).join('')}</tbody></table>
+        </div>
+      </div>`;
+  }
+  return `
+    <h1 class="page-title">Por Mês — Fábrica</h1>
+    <p class="page-sub">Clique em um mês para ver o detalhamento.</p>
+    <div class="grid grid-3 section">
+      ${porMes.map(m=>`
+        <div class="card pickcard ${sel===m.mes?'selected':''}" onclick="selectMesFabrica('${m.mes}')">
+          <div class="top"><span class="name">${esc(m.mes)}</span><span class="chip">${fmtNum(m.count)} entregas</span></div>
+          <div class="stat-row"><span>Valor NF</span><b>${fmtBRL(m.valorNF)}</b></div>
+          <div class="stat-row"><span>Frete</span><b>${fmtBRL(m.frete)}</b></div>
+          <div class="stat-row"><span>% Frete</span><b style="color:var(--warn)">${pctFrete(m.valorNF,m.frete)}</b></div>
+        </div>`).join('')}
+    </div>
+    ${detail}
+  `;
+}
+function selectMesFabrica(m){ state.fabrica.mes.selected = (state.fabrica.mes.selected===m) ? null : m; renderContent(); }
+
+function openModalFabrica(idx){
+  const e = state.fabrica.data[idx];
+  if(!e) return;
+  const overlay = document.getElementById('modal-overlay');
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <h3>Entrega NF ${esc(e.nf)}</h3>
+      <button class="close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-field"><div class="l">Mês</div><div class="v">${esc(e.mes)}</div></div>
+        <div class="modal-field"><div class="l">Transportadora</div><div class="v">${esc(e.transportadora)||'—'}</div></div>
+        <div class="modal-field"><div class="l">Valor da NF</div><div class="v">${fmtBRL(e.valorNF)}</div></div>
+        <div class="modal-field"><div class="l">Frete</div><div class="v">${fmtBRL(e.frete)}</div></div>
+        <div class="modal-field"><div class="l">% Frete</div><div class="v">${pctFrete(e.valorNF,e.frete)}</div></div>
+        <div class="modal-field"><div class="l">Peso Total</div><div class="v">${e.pesoTotal? fmtNum(Math.round(e.pesoTotal))+' kg' : '—'}</div></div>
+        <div class="modal-field"><div class="l">Caixas / Livretos</div><div class="v">${fmtNum(e.caixas)} / ${fmtNum(e.livretos)}</div></div>
+      </div>
+      <div style="margin-top:18px;">
+        <div class="l" style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:8px;">Produtos desta entrega</div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Cód.</th><th>Produto</th><th>Caixas</th><th>Livretos</th><th>Valor</th></tr></thead>
+          <tbody>${(e.itens||[]).map(it=>`<tr><td>${esc(it.codRolling)}</td><td>${esc(it.produto)}</td><td>${fmtNum(it.caixas)}</td><td>${fmtNum(it.livretos)}</td><td>${fmtBRL(it.valorProdutos)}</td></tr>`).join('')}</tbody></table>
+        </div>
+      </div>
+    </div>
+  `;
+  overlay.classList.remove('hidden');
+}
 
 /* ============================================================
    INIT
