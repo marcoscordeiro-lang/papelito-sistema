@@ -4,146 +4,492 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Papelito — Análise Faturamento × Frete</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-    body{background:#F5F5F5;color:#1A1A1A}
-    .nav{background:#1A1A1A;padding:12px 24px;display:flex;align-items:center;gap:16px}
-    .nav-logo{color:#FFD600;font-weight:bold;font-size:16px}
-    .nav-item{color:#888;font-size:13px;padding:6px 12px;border-radius:4px;cursor:pointer;text-decoration:none}
+    body{background:#F5F5F5;color:#1A1A1A;min-height:100vh}
+    .nav{background:#1A1A1A;padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100}
+    .nav-logo{color:#FFD600;font-weight:bold;font-size:16px;letter-spacing:2px}
+    .nav-item{color:#888;font-size:13px;padding:6px 14px;border-radius:4px;cursor:pointer;border:none;background:none;text-decoration:none}
     .nav-item.active,.nav-item:hover{background:#FFD600;color:#1A1A1A;font-weight:bold}
-    .container{max-width:1200px;margin:24px auto;padding:0 24px}
+    .container{max-width:1400px;margin:24px auto;padding:0 24px}
+    .page{display:none}.page.active{display:block}
+
+    /* Upload */
+    .upload-box{background:#fff;border:2px dashed #FFD600;border-radius:12px;padding:60px;text-align:center;cursor:pointer;transition:background .2s}
+    .upload-box:hover{background:#FFFDE7}
+    .upload-box h2{font-size:20px;margin-bottom:8px}
+    .upload-box p{color:#666;font-size:14px;margin-bottom:20px}
+    .btn-upload{background:#FFD600;color:#1A1A1A;border:none;border-radius:6px;padding:12px 28px;font-size:14px;font-weight:bold;cursor:pointer}
+    .btn-upload:hover{background:#FBC02D}
+    input[type=file]{display:none}
+
+    /* KPIs */
     .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
-    .kpi{background:#fff;border:1px solid #E0E0E0;border-radius:8px;padding:16px}
-    .kpi-val{font-size:28px;font-weight:bold}
+    .kpi{background:#fff;border:1px solid #E0E0E0;border-radius:8px;padding:16px;border-top:4px solid #FFD600}
+    .kpi-val{font-size:28px;font-weight:bold;color:#1A1A1A}
     .kpi-lbl{font-size:12px;color:#666;margin-top:4px}
     .kpi-ok .kpi-val{color:#0F6E56}
     .kpi-warn .kpi-val{color:#BA7517}
+    .kpi-err .kpi-val{color:#C00000}
+
+    /* Cards */
     .card{background:#fff;border:1px solid #E0E0E0;border-radius:8px;padding:20px;margin-bottom:16px}
-    .card-title{font-size:14px;font-weight:bold;margin-bottom:12px;color:#1A1A1A}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th{text-align:left;color:#666;font-weight:normal;padding:8px;border-bottom:1px solid #E0E0E0}
-    td{padding:8px;border-bottom:1px solid #F0F0F0}
-    .badge{display:inline-block;font-size:11px;padding:3px 8px;border-radius:10px;font-weight:bold}
+    .card-title{font-size:14px;font-weight:bold;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+
+    /* Table */
+    .table-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{text-align:left;color:#fff;font-weight:bold;padding:8px 10px;background:#1A1A1A;border-bottom:2px solid #FFD600;white-space:nowrap}
+    td{padding:7px 10px;border-bottom:1px solid #F0F0F0;white-space:nowrap}
+    tr:hover td{background:#FFFDE7}
+    .badge{display:inline-block;font-size:10px;padding:3px 8px;border-radius:10px;font-weight:bold}
     .badge-ok{background:#E1F5EE;color:#0F6E56}
     .badge-pend{background:#FAEEDA;color:#854F0B}
-    .badge-err{background:#FCEBEB;color:#A32D2D}
-    .page{display:none}.page.active{display:block}
-    .search{width:100%;padding:8px 12px;border:1px solid #E0E0E0;border-radius:6px;font-size:13px;margin-bottom:12px}
+    .badge-na{background:#F5F5F5;color:#666}
+
+    /* Search & Filter */
+    .filters{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+    .search{padding:8px 12px;border:1px solid #E0E0E0;border-radius:6px;font-size:13px;flex:1;min-width:200px}
+    select{padding:8px 12px;border:1px solid #E0E0E0;border-radius:6px;font-size:13px;background:#fff;cursor:pointer}
+
+    /* Progress */
+    .progress-bar{height:8px;background:#E0E0E0;border-radius:4px;overflow:hidden;margin-top:4px}
+    .progress-fill{height:100%;background:#FFD600;border-radius:4px;transition:width .3s}
+    .progress-fill.green{background:#0F6E56}
+
+    /* Loading */
+    .loading{text-align:center;padding:40px;color:#666;font-size:14px}
+    .spinner{width:40px;height:40px;border:4px solid #E0E0E0;border-top:4px solid #FFD600;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Resumo transportadora */
+    .transp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+    .transp-card{background:#fff;border:1px solid #E0E0E0;border-radius:8px;padding:14px;border-left:4px solid #FFD600}
+    .transp-nome{font-size:12px;font-weight:bold;color:#1A1A1A;margin-bottom:6px}
+    .transp-nfs{font-size:22px;font-weight:bold;color:#1A1A1A}
+    .transp-pend{font-size:11px;color:#C00000;margin-top:2px}
+
+    .empty{text-align:center;padding:40px;color:#999;font-size:13px}
+    .tag-mes{display:inline-block;background:#1A1A1A;color:#FFD600;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:bold}
   </style>
 </head>
 <body>
+
 <nav class="nav">
   <span class="nav-logo">PAPELITO</span>
-  <a class="nav-item active" onclick="showPage('dashboard')">Dashboard</a>
-  <a class="nav-item" onclick="showPage('master')">Master NFs</a>
-  <a class="nav-item" onclick="showPage('pendencias')">Pendências</a>
-  <a class="nav-item" onclick="showPage('transportadoras')">Por transportadora</a>
+  <button class="nav-item active" onclick="showPage('dashboard',this)">Dashboard</button>
+  <button class="nav-item" onclick="showPage('master',this)">Master NFs</button>
+  <button class="nav-item" onclick="showPage('pendencias',this)">Pendências</button>
+  <button class="nav-item" onclick="showPage('transportadoras',this)">Transportadoras</button>
 </nav>
 
 <div class="container">
 
-  <!-- DASHBOARD -->
-  <div id="dashboard" class="page active">
-    <div class="kpi-grid">
-      <div class="kpi"><div class="kpi-val">2.720</div><div class="kpi-lbl">NFs Jan–Jun/26</div></div>
-      <div class="kpi kpi-ok"><div class="kpi-val">967</div><div class="kpi-lbl">Com frete ✔</div></div>
-      <div class="kpi kpi-warn"><div class="kpi-val">1.096</div><div class="kpi-lbl">Pendentes ⚠</div></div>
-      <div class="kpi"><div class="kpi-val">657</div><div class="kpi-lbl">N/A —</div></div>
+  <!-- UPLOAD -->
+  <div id="upload-area">
+    <br>
+    <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+      <div style="font-size:48px;margin-bottom:16px">📊</div>
+      <h2>Importar planilha Master</h2>
+      <p>Arraste o arquivo Excel aqui ou clique para selecionar</p>
+      <p style="font-size:12px;color:#999;margin-bottom:20px">Aceita: Master_Faturamento_Frete_2026.xlsx</p>
+      <button class="btn-upload">Selecionar arquivo</button>
     </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="carregarArquivo(this)">
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading-area" style="display:none">
+    <br>
+    <div class="card" style="text-align:center;padding:40px">
+      <div class="spinner"></div>
+      <p id="loading-msg">Lendo arquivo...</p>
+    </div>
+  </div>
+
+  <!-- PAGES -->
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="page">
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-val" id="kpi-total">—</div><div class="kpi-lbl">Total de NFs</div></div>
+      <div class="kpi kpi-ok"><div class="kpi-val" id="kpi-ok">—</div><div class="kpi-lbl">✔ Com frete</div></div>
+      <div class="kpi kpi-warn"><div class="kpi-val" id="kpi-pend">—</div><div class="kpi-lbl">⚠ Pendentes</div></div>
+      <div class="kpi kpi-err"><div class="kpi-val" id="kpi-fat">—</div><div class="kpi-lbl">Faturamento total</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Evolução por mês</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mês</th><th>Total NFs</th><th>✔ Com frete</th><th>⚠ Pendentes</th><th>— N/A</th><th>Cobertura</th></tr></thead>
+          <tbody id="tabela-meses"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title">Pendências por transportadora</div>
-      <table>
-        <thead><tr><th>Transportadora</th><th>NFs pendentes</th><th>Faturamento</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>JAMEF TRANSPORTES EIRELI</td><td>720</td><td>R$ 4.200.000</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>BRASPRESS TRANSPORTES URGENTES</td><td>139</td><td>R$ 890.000</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>TG TRANSPORTES GERAIS</td><td>76</td><td>R$ 320.000</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>TAM LINHAS AEREAS</td><td>51</td><td>R$ 98.000</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>CAIAPO CARGAS LTDA</td><td>21</td><td>R$ 676.000</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>ALFA TRANSPORTES</td><td>6</td><td>R$ 172.000</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>5ª RODA CARGAS</td><td>3</td><td>R$ 528.000</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-title">Resumo por mês</div>
-      <table>
-        <thead><tr><th>Mês</th><th>Total NFs</th><th>Com frete</th><th>Pendentes</th><th>N/A</th></tr></thead>
-        <tbody>
-          <tr><td>Jan/26</td><td>406</td><td><span class="badge badge-ok">156</span></td><td><span class="badge badge-pend">154</span></td><td>96</td></tr>
-          <tr><td>Fev/26</td><td>530</td><td><span class="badge badge-ok">132</span></td><td><span class="badge badge-pend">226</span></td><td>172</td></tr>
-          <tr><td>Mar/26</td><td>637</td><td><span class="badge badge-ok">243</span></td><td><span class="badge badge-pend">257</span></td><td>137</td></tr>
-          <tr><td>Abr/26</td><td>427</td><td><span class="badge badge-ok">178</span></td><td><span class="badge badge-pend">142</span></td><td>107</td></tr>
-          <tr><td>Mai/26</td><td>497</td><td><span class="badge badge-ok">214</span></td><td><span class="badge badge-pend">205</span></td><td>78</td></tr>
-          <tr><td>Jun/26</td><td>223</td><td><span class="badge badge-ok">44</span></td><td><span class="badge badge-pend">112</span></td><td>67</td></tr>
-        </tbody>
-      </table>
+      <div class="transp-grid" id="transp-cards"></div>
     </div>
   </div>
 
   <!-- MASTER NFs -->
   <div id="master" class="page">
     <div class="card">
-      <div class="card-title">Master — Faturamento × Frete | Jan–Jun/2026</div>
-      <input class="search" placeholder="Buscar por NF, parceiro, cidade...">
-      <table>
-        <thead><tr><th>Mês</th><th>NF</th><th>Empresa</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Valor NF</th><th>Transportadora</th><th>Valor Frete</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>Jun/26</td><td>20082</td><td>RCS - MATRIZ</td><td>RCS IMPORTACAO</td><td>CACHOEIRINHA</td><td>RS</td><td>R$ 300,00</td><td>JAMEF</td><td>R$ 107,36</td><td><span class="badge badge-ok">✔ OK</span></td></tr>
-          <tr><td>Jun/26</td><td>20027</td><td>RCS - FILIAL ES</td><td>NARGUILESTE TABACARIA</td><td>NATAL</td><td>RN</td><td>R$ 13.573,00</td><td>JAMEF</td><td>R$ 555,10</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>Jun/26</td><td>19988</td><td>RCS - FILIAL ES</td><td>JAY ARBUDA PRESENTES</td><td>SAO PAULO</td><td>SP</td><td>R$ 73.180,80</td><td>JAMEF</td><td>R$ 1.952,64</td><td><span class="badge badge-ok">✔ OK</span></td></tr>
-          <tr><td>Mai/26</td><td>1642</td><td>RCS - FILIAL ES</td><td>EMIRADOS ARABE COM DE TABACCOS</td><td>SAO PAULO</td><td>SP</td><td>R$ 191.966,50</td><td>JAMEF</td><td>—</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-          <tr><td>Abr/26</td><td>1486</td><td>RCS - FILIAL ES</td><td>CARVALHO & OLIANI LTDA</td><td>SAO PAULO</td><td>SP</td><td>R$ 276.024,60</td><td>JAMEF</td><td>—</td><td><span class="badge badge-pend">⚠ Pendente</span></td></tr>
-        </tbody>
-      </table>
+      <div class="card-title">
+        <span>Master — Faturamento × Frete</span>
+        <span id="master-count" style="font-size:12px;color:#666"></span>
+      </div>
+      <div class="filters">
+        <input class="search" id="search-master" placeholder="Buscar NF, parceiro, cidade..." oninput="filtrarMaster()">
+        <select id="filtro-mes" onchange="filtrarMaster()"><option value="">Todos os meses</option></select>
+        <select id="filtro-status" onchange="filtrarMaster()">
+          <option value="">Todos os status</option>
+          <option value="ok">✔ Com frete</option>
+          <option value="pend">⚠ Pendente</option>
+          <option value="na">— N/A</option>
+        </select>
+        <select id="filtro-uf" onchange="filtrarMaster()"><option value="">Todos os estados</option></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mês</th><th>NF</th><th>Empresa</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Tipo</th><th>Transportadora</th><th>Faturamento</th><th>Frete</th><th>Status</th></tr></thead>
+          <tbody id="tabela-master"></tbody>
+        </table>
+      </div>
+      <div id="master-empty" class="empty" style="display:none">Nenhum registro encontrado.</div>
     </div>
   </div>
 
   <!-- PENDÊNCIAS -->
   <div id="pendencias" class="page">
     <div class="card">
-      <div class="card-title">Pendências — Jan–Jun/2026 | 1.096 NFs</div>
-      <input class="search" placeholder="Buscar por NF, parceiro...">
-      <table>
-        <thead><tr><th>Mês</th><th>NF</th><th>Empresa</th><th>Parceiro</th><th>UF</th><th>Valor NF</th><th>Transportadora</th></tr></thead>
-        <tbody>
-          <tr><td>Mai/26</td><td>1486</td><td>RCS - FILIAL ES</td><td>CARVALHO & OLIANI LTDA</td><td>SP</td><td>R$ 276.024,60</td><td>JAMEF</td></tr>
-          <tr><td>Mai/26</td><td>1642</td><td>RCS - FILIAL ES</td><td>EMIRADOS ARABE COMERCIO</td><td>SP</td><td>R$ 191.966,50</td><td>JAMEF</td></tr>
-          <tr><td>Mai/26</td><td>1505</td><td>RCS - FILIAL ES</td><td>JT INTERNATIONAL DISTRIBUIDORA</td><td>SP</td><td>R$ 200.638,00</td><td>BRASPRESS</td></tr>
-          <tr><td>Mai/26</td><td>19728</td><td>RCS - MATRIZ</td><td>MONTE FUJI ABC CINE FOTO SOM</td><td>SP</td><td>R$ 195.538,00</td><td>5ª RODA</td></tr>
-          <tr><td>Mai/26</td><td>1614</td><td>RCS - FILIAL ES</td><td>CIFAL COMERCIAL DE TABACOS</td><td>SP</td><td>R$ 258.407,00</td><td>5ª RODA</td></tr>
-        </tbody>
-      </table>
+      <div class="card-title">
+        <span>Pendências — sem frete</span>
+        <span id="pend-count" style="font-size:12px;color:#C00000"></span>
+      </div>
+      <div class="filters">
+        <input class="search" id="search-pend" placeholder="Buscar NF, parceiro..." oninput="filtrarPendencias()">
+        <select id="filtro-pend-transp" onchange="filtrarPendencias()"><option value="">Todas as transportadoras</option></select>
+        <select id="filtro-pend-mes" onchange="filtrarPendencias()"><option value="">Todos os meses</option></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mês</th><th>NF</th><th>Empresa</th><th>Parceiro</th><th>Cidade</th><th>UF</th><th>Tipo</th><th>Transportadora</th><th>Faturamento</th></tr></thead>
+          <tbody id="tabela-pend"></tbody>
+        </table>
+      </div>
+      <div id="pend-empty" class="empty" style="display:none">Nenhuma pendência encontrada.</div>
     </div>
   </div>
 
-  <!-- POR TRANSPORTADORA -->
+  <!-- TRANSPORTADORAS -->
   <div id="transportadoras" class="page">
     <div class="card">
       <div class="card-title">Resumo por transportadora — Jan–Jun/2026</div>
-      <table>
-        <thead><tr><th>Transportadora</th><th>NFs total</th><th>✔ Com frete</th><th>⚠ Pendentes</th><th>— N/A</th><th>% frete</th></tr></thead>
-        <tbody>
-          <tr><td>JAMEF TRANSPORTES EIRELI</td><td>850</td><td><span class="badge badge-ok">130</span></td><td><span class="badge badge-pend">720</span></td><td>0</td><td>15%</td></tr>
-          <tr><td>BRASPRESS TRANSPORTES URGENTES</td><td>207</td><td><span class="badge badge-ok">68</span></td><td><span class="badge badge-pend">139</span></td><td>0</td><td>33%</td></tr>
-          <tr><td>TG TRANSPORTES GERAIS</td><td>107</td><td><span class="badge badge-ok">31</span></td><td><span class="badge badge-pend">76</span></td><td>0</td><td>29%</td></tr>
-          <tr><td>TAM LINHAS AEREAS</td><td>68</td><td><span class="badge badge-ok">17</span></td><td><span class="badge badge-pend">51</span></td><td>0</td><td>25%</td></tr>
-          <tr><td>CAIAPO CARGAS LTDA</td><td>21</td><td><span class="badge badge-ok">0</span></td><td><span class="badge badge-pend">21</span></td><td>0</td><td>0%</td></tr>
-          <tr><td>ALFA TRANSPORTES</td><td>6</td><td><span class="badge badge-ok">0</span></td><td><span class="badge badge-pend">6</span></td><td>0</td><td>0%</td></tr>
-          <tr><td>5ª RODA CARGAS</td><td>3</td><td><span class="badge badge-ok">0</span></td><td><span class="badge badge-pend">3</span></td><td>0</td><td>0%</td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Transportadora</th><th>Total NFs</th><th>✔ Com frete</th><th>⚠ Pendentes</th><th>— N/A</th><th>Faturamento</th><th>Total Frete</th><th>% Frete/Fat</th><th>Cobertura</th></tr></thead>
+          <tbody id="tabela-transp"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
 </div>
 
 <script>
-function showPage(id){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+let dados = [];
+let dadosFiltrados = [];
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  event.target.classList.add('active');
+  if (el) el.classList.add('active');
+}
+
+function carregarArquivo(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  document.getElementById('upload-area').style.display = 'none';
+  document.getElementById('loading-area').style.display = 'block';
+  document.getElementById('loading-msg').textContent = 'Lendo arquivo Excel...';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      document.getElementById('loading-msg').textContent = 'Processando dados...';
+      const wb = XLSX.read(e.target.result, {type:'array'});
+
+      // Buscar aba MASTER
+      let wsName = wb.SheetNames.find(n => n.includes('MASTER') || n.includes('Master') || n.includes('Faturamento'));
+      if (!wsName) wsName = wb.SheetNames[0];
+      const ws = wb.Sheets[wsName];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+      // Encontrar linha de cabeçalho
+      let hdrRow = -1;
+      for (let i = 0; i < Math.min(10, rows.length); i++) {
+        const row = rows[i].map(v => String(v).toUpperCase());
+        if (row.some(v => v.includes('NF') || v.includes('NOTA'))) { hdrRow = i; break; }
+      }
+      if (hdrRow === -1) hdrRow = 3;
+
+      const hdrs = rows[hdrRow].map(v => String(v).trim().toUpperCase());
+
+      // Mapear colunas
+      const idx = {
+        mes:    hdrs.findIndex(h => h.includes('MÊS') || h === 'MES' || h.includes('M\u00cAS')),
+        nf:     hdrs.findIndex(h => h.includes('NF') || h.includes('NOTA')),
+        emp:    hdrs.findIndex(h => h.includes('EMPRESA') || h.includes('FILIAL')),
+        parc:   hdrs.findIndex(h => h.includes('PARCEIRO') || h.includes('CLIENTE')),
+        cidade: hdrs.findIndex(h => h.includes('CIDADE') || h.includes('MUNIC')),
+        uf:     hdrs.findIndex(h => h === 'UF' || h.includes('ESTADO')),
+        tipo:   hdrs.findIndex(h => h.includes('TIPO')),
+        transp_fat: hdrs.findIndex(h => h.includes('TRANSP') && (h.includes('FAT') || h.includes('NF'))),
+        fat:    hdrs.findIndex(h => h.includes('FAT') || h.includes('VALOR NF') || h.includes('VALOR DA NF')),
+        transp_frete: hdrs.findIndex(h => h.includes('TRANSP') && h.includes('FRETE')),
+        frete:  hdrs.findIndex(h => h.includes('VALOR FRETE') || h.includes('VL FRETE')),
+        status: hdrs.findIndex(h => h.includes('STATUS')),
+      };
+
+      dados = [];
+      for (let i = hdrRow + 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r[idx.nf]) continue;
+        const nf = String(r[idx.nf] || '').trim();
+        if (!nf || nf === 'TOTAL GERAL' || nf === 'NF') continue;
+
+        const mes     = String(r[idx.mes] || '').trim();
+        const fat     = parseFloat(r[idx.fat]) || 0;
+        const frete   = parseFloat(r[idx.frete]) || 0;
+        const status  = String(r[idx.status] || '').trim();
+        const transp  = String(r[idx.transp_fat >= 0 ? idx.transp_fat : idx.transp_frete] || '').trim();
+
+        let statusTipo = 'na';
+        if (status.includes('⚠') || status.includes('Preencher') || status.toLowerCase().includes('pend')) statusTipo = 'pend';
+        else if (status.includes('✔') || frete > 0) statusTipo = 'ok';
+
+        dados.push({
+          mes,
+          nf,
+          empresa:  String(r[idx.emp]    || '').trim(),
+          parceiro: String(r[idx.parc]   || '').trim(),
+          cidade:   String(r[idx.cidade] || '').trim(),
+          uf:       String(r[idx.uf]     || '').trim(),
+          tipo:     String(r[idx.tipo]   || '').trim(),
+          transp,
+          fat,
+          frete,
+          status,
+          statusTipo,
+        });
+      }
+
+      document.getElementById('loading-area').style.display = 'none';
+      inicializarDashboard();
+      showPage('dashboard', document.querySelector('.nav-item'));
+    } catch(err) {
+      alert('Erro ao ler o arquivo: ' + err.message);
+      document.getElementById('loading-area').style.display = 'none';
+      document.getElementById('upload-area').style.display = 'block';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function fmt(n) { return 'R$ ' + (n||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtN(n) { return (n||0).toLocaleString('pt-BR'); }
+
+function inicializarDashboard() {
+  const total = dados.length;
+  const ok    = dados.filter(r => r.statusTipo === 'ok').length;
+  const pend  = dados.filter(r => r.statusTipo === 'pend').length;
+  const fatTotal = dados.reduce((s,r) => s + r.fat, 0);
+
+  document.getElementById('kpi-total').textContent = fmtN(total);
+  document.getElementById('kpi-ok').textContent    = fmtN(ok);
+  document.getElementById('kpi-pend').textContent  = fmtN(pend);
+  document.getElementById('kpi-fat').textContent   = fmt(fatTotal);
+
+  // Tabela meses
+  const meses = [...new Set(dados.map(r => r.mes).filter(Boolean))];
+  const tMeses = document.getElementById('tabela-meses');
+  tMeses.innerHTML = '';
+  meses.forEach(mes => {
+    const grupo = dados.filter(r => r.mes === mes);
+    const gOk   = grupo.filter(r => r.statusTipo === 'ok').length;
+    const gPend = grupo.filter(r => r.statusTipo === 'pend').length;
+    const gNa   = grupo.filter(r => r.statusTipo === 'na').length;
+    const cobert = grupo.length > 0 ? Math.round(gOk/grupo.length*100) : 0;
+    tMeses.innerHTML += `<tr>
+      <td><span class="tag-mes">${mes}</span></td>
+      <td><b>${fmtN(grupo.length)}</b></td>
+      <td style="color:#0F6E56"><b>${fmtN(gOk)}</b></td>
+      <td style="color:#BA7517"><b>${fmtN(gPend)}</b></td>
+      <td style="color:#666">${fmtN(gNa)}</td>
+      <td style="min-width:120px">
+        <div style="font-size:11px;margin-bottom:2px">${cobert}%</div>
+        <div class="progress-bar"><div class="progress-fill ${cobert>70?'green':''}" style="width:${cobert}%"></div></div>
+      </td>
+    </tr>`;
+  });
+
+  // Cards transportadoras
+  const transpMap = {};
+  dados.forEach(r => {
+    const t = r.transp || '— Não informada';
+    if (!transpMap[t]) transpMap[t] = {total:0, pend:0};
+    transpMap[t].total++;
+    if (r.statusTipo === 'pend') transpMap[t].pend++;
+  });
+  const tCards = document.getElementById('transp-cards');
+  tCards.innerHTML = '';
+  Object.entries(transpMap).sort((a,b) => b[1].pend - a[1].pend).slice(0,8).forEach(([nome,d]) => {
+    tCards.innerHTML += `<div class="transp-card">
+      <div class="transp-nome">${nome}</div>
+      <div class="transp-nfs">${fmtN(d.total)} NFs</div>
+      ${d.pend > 0 ? `<div class="transp-pend">⚠ ${fmtN(d.pend)} pendentes</div>` : '<div style="color:#0F6E56;font-size:11px">✔ Tudo OK</div>'}
+    </div>`;
+  });
+
+  // Filtros
+  preencherFiltros();
+  renderMaster(dados);
+  renderPendencias(dados.filter(r => r.statusTipo === 'pend'));
+  renderTransportadoras();
+}
+
+function preencherFiltros() {
+  const meses = [...new Set(dados.map(r => r.mes).filter(Boolean))];
+  const ufs   = [...new Set(dados.map(r => r.uf).filter(Boolean))].sort();
+  const transps = [...new Set(dados.map(r => r.transp).filter(Boolean))].sort();
+
+  ['filtro-mes','filtro-pend-mes'].forEach(id => {
+    const sel = document.getElementById(id);
+    const base = id === 'filtro-mes' ? '' : '';
+    sel.innerHTML = `<option value="">Todos os meses</option>` + meses.map(m => `<option>${m}</option>`).join('');
+  });
+  const selUf = document.getElementById('filtro-uf');
+  selUf.innerHTML = `<option value="">Todos os estados</option>` + ufs.map(u => `<option>${u}</option>`).join('');
+  const selTransp = document.getElementById('filtro-pend-transp');
+  selTransp.innerHTML = `<option value="">Todas as transportadoras</option>` + transps.map(t => `<option>${t}</option>`).join('');
+}
+
+function filtrarMaster() {
+  const q      = document.getElementById('search-master').value.toLowerCase();
+  const mes    = document.getElementById('filtro-mes').value;
+  const status = document.getElementById('filtro-status').value;
+  const uf     = document.getElementById('filtro-uf').value;
+  const filtrado = dados.filter(r =>
+    (!q || r.nf.toLowerCase().includes(q) || r.parceiro.toLowerCase().includes(q) || r.cidade.toLowerCase().includes(q)) &&
+    (!mes || r.mes === mes) &&
+    (!status || r.statusTipo === status) &&
+    (!uf || r.uf === uf)
+  );
+  renderMaster(filtrado);
+}
+
+function filtrarPendencias() {
+  const q     = document.getElementById('search-pend').value.toLowerCase();
+  const transp= document.getElementById('filtro-pend-transp').value;
+  const mes   = document.getElementById('filtro-pend-mes').value;
+  const filtrado = dados.filter(r =>
+    r.statusTipo === 'pend' &&
+    (!q || r.nf.toLowerCase().includes(q) || r.parceiro.toLowerCase().includes(q)) &&
+    (!transp || r.transp === transp) &&
+    (!mes || r.mes === mes)
+  );
+  renderPendencias(filtrado);
+}
+
+function renderMaster(lista) {
+  const tbody = document.getElementById('tabela-master');
+  document.getElementById('master-count').textContent = fmtN(lista.length) + ' registros';
+  if (!lista.length) {
+    tbody.innerHTML = '';
+    document.getElementById('master-empty').style.display = 'block';
+    return;
+  }
+  document.getElementById('master-empty').style.display = 'none';
+  tbody.innerHTML = lista.slice(0,500).map(r => {
+    const badge = r.statusTipo === 'ok' ? 'badge-ok' : r.statusTipo === 'pend' ? 'badge-pend' : 'badge-na';
+    const label = r.statusTipo === 'ok' ? '✔ OK' : r.statusTipo === 'pend' ? '⚠ Pendente' : '—';
+    return `<tr>
+      <td><span class="tag-mes">${r.mes}</span></td>
+      <td><b>${r.nf}</b></td>
+      <td>${r.empresa}</td>
+      <td>${r.parceiro}</td>
+      <td>${r.cidade}</td>
+      <td>${r.uf}</td>
+      <td>${r.tipo}</td>
+      <td>${r.transp || '—'}</td>
+      <td>${fmt(r.fat)}</td>
+      <td>${r.frete > 0 ? fmt(r.frete) : '—'}</td>
+      <td><span class="badge ${badge}">${label}</span></td>
+    </tr>`;
+  }).join('');
+  if (lista.length > 500) {
+    tbody.innerHTML += `<tr><td colspan="11" style="text-align:center;color:#666;padding:12px">Exibindo 500 de ${fmtN(lista.length)} registros. Use os filtros para refinar.</td></tr>`;
+  }
+}
+
+function renderPendencias(lista) {
+  const tbody = document.getElementById('tabela-pend');
+  document.getElementById('pend-count').textContent = fmtN(lista.length) + ' NFs pendentes';
+  if (!lista.length) {
+    tbody.innerHTML = '';
+    document.getElementById('pend-empty').style.display = 'block';
+    return;
+  }
+  document.getElementById('pend-empty').style.display = 'none';
+  tbody.innerHTML = lista.slice(0,500).map(r => `<tr>
+    <td><span class="tag-mes">${r.mes}</span></td>
+    <td><b>${r.nf}</b></td>
+    <td>${r.empresa}</td>
+    <td>${r.parceiro}</td>
+    <td>${r.cidade}</td>
+    <td>${r.uf}</td>
+    <td>${r.tipo}</td>
+    <td>${r.transp || '—'}</td>
+    <td>${fmt(r.fat)}</td>
+  </tr>`).join('');
+}
+
+function renderTransportadoras() {
+  const transpMap = {};
+  dados.forEach(r => {
+    const t = r.transp || '— Não informada';
+    if (!transpMap[t]) transpMap[t] = {total:0,ok:0,pend:0,na:0,fat:0,frete:0};
+    transpMap[t].total++;
+    transpMap[t][r.statusTipo]++;
+    transpMap[t].fat += r.fat;
+    transpMap[t].frete += r.frete;
+  });
+  const tbody = document.getElementById('tabela-transp');
+  tbody.innerHTML = Object.entries(transpMap)
+    .sort((a,b) => b[1].fat - a[1].fat)
+    .map(([nome,d]) => {
+      const pct = d.fat > 0 ? (d.frete/d.fat*100).toFixed(2) : '0.00';
+      const cob = d.total > 0 ? Math.round(d.ok/d.total*100) : 0;
+      return `<tr>
+        <td><b>${nome}</b></td>
+        <td>${fmtN(d.total)}</td>
+        <td style="color:#0F6E56"><b>${fmtN(d.ok)}</b></td>
+        <td style="color:#C00000"><b>${fmtN(d.pend)}</b></td>
+        <td style="color:#666">${fmtN(d.na)}</td>
+        <td>${fmt(d.fat)}</td>
+        <td>${fmt(d.frete)}</td>
+        <td>${pct}%</td>
+        <td>
+          <div style="font-size:11px;margin-bottom:2px">${cob}%</div>
+          <div class="progress-bar"><div class="progress-fill ${cob>70?'green':''}" style="width:${cob}%"></div></div>
+        </td>
+      </tr>`;
+    }).join('');
 }
 </script>
 </body>
