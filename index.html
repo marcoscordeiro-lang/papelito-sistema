@@ -187,6 +187,8 @@ tbody tr:hover{background:#FFFBEA;}
 .pickcard .top .chip{background:var(--black);color:var(--yellow);font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;}
 
 .empty-state{padding:60px 20px;text-align:center;color:var(--muted);}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--muted);gap:8px;padding:2px 0;}
+.stat-row b{color:var(--text);white-space:nowrap;text-align:right;}
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;height:320px;}
 .two-col{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;}
 @media(max-width:1100px){.two-col{grid-template-columns:1fr;}}
@@ -265,6 +267,23 @@ function statusBadge(status){
   return `<span class="badge ${cls}">${esc(status)}</span>`;
 }
 function uniqueSorted(arr){ return [...new Set(arr.filter(x=>x!==undefined && x!==null && x!==''))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+function pctFrete(fat, frete){
+  if(!fat) return '—';
+  return ((frete||0)/fat*100).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+}
+function groupByRegiao(data){
+  return REGIOES.map(r=>{
+    const rows = data.filter(x=>x.regiao===r);
+    return { regiao:r, count:rows.length, fat: rows.reduce((s,x)=>s+(x.fat||0),0), frete: rows.reduce((s,x)=>s+(x.frete||0),0), pend: rows.filter(x=>x.status==='⚠ Preencher').length };
+  });
+}
+function groupByTrimestre(data){
+  const trims = uniqueSorted(data.map(r=>r.trim)).sort();
+  return trims.map(t=>{
+    const rows = data.filter(r=>r.trim===t);
+    return { trim:t, count:rows.length, fat: rows.reduce((s,r)=>s+(r.fat||0),0), frete: rows.reduce((s,r)=>s+(r.frete||0),0) };
+  });
+}
 
 function isConciliada(r){ return (r.status==='✔ Frete OK'||r.status==='✔ Encontrado') && !r.pendencia; }
 function isDivergencia(r){
@@ -401,8 +420,11 @@ function tplDashboard(){
   const comFrete = d.filter(r=> r.frete!==null && r.frete!==undefined).length;
   const pendentes = d.filter(r=> r.status==='⚠ Preencher').length;
   const totalFat = d.reduce((s,r)=> s + (r.fat||0), 0);
+  const totalFrete = d.reduce((s,r)=> s + (r.frete||0), 0);
 
   const porTransp = groupByTransportadora(d).slice(0,6);
+  const porRegiao = groupByRegiao(d);
+  const porTrim = groupByTrimestre(d);
 
   return `
     <h1 class="page-title">Dashboard</h1>
@@ -416,8 +438,45 @@ function tplDashboard(){
     </div>
 
     <div class="section">
+      <div class="section-head"><h3>Acumulado Geral — Faturamento × Frete</h3></div>
+      <div class="grid grid-3">
+        <div class="card kpi"><div class="label">Faturamento Total (todos os meses)</div><div class="value" style="font-size:19px;">${fmtBRL(totalFat)}</div></div>
+        <div class="card kpi"><div class="label">Frete Total Pago (todos os meses)</div><div class="value" style="font-size:19px;">${fmtBRL(totalFrete)}</div></div>
+        <div class="card kpi"><div class="label">% Frete sobre Faturamento</div><div class="value" style="color:var(--warn)">${pctFrete(totalFat,totalFrete)}</div></div>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-head"><h3>Evolução por Mês</h3></div>
       <div class="chart-box"><canvas id="evoChart"></canvas></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h3>Acumulado por Trimestre</h3></div>
+      <div class="grid grid-4">
+        ${porTrim.map(t=>`
+          <div class="card">
+            <div class="name" style="font-weight:800;margin-bottom:8px;">${esc(t.trim)}</div>
+            <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>NFs</span><b style="color:var(--text)">${fmtNum(t.count)}</b></div>
+            <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Faturamento</span><b style="color:var(--text)">${fmtBRL(t.fat)}</b></div>
+            <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Frete</span><b style="color:var(--text)">${fmtBRL(t.frete)}</b></div>
+            <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>% Frete</span><b style="color:var(--warn)">${pctFrete(t.fat,t.frete)}</b></div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h3>Por Região</h3><button class="btn-outline btn btn-sm" onclick="navigate('regiao')">Ver detalhes →</button></div>
+      <div class="grid grid-5">
+        ${porRegiao.map(r=>`
+          <div class="card">
+            <div class="name" style="font-weight:800;margin-bottom:8px;">${esc(r.regiao)}</div>
+            <div class="stat-row"><span>NFs</span><b>${fmtNum(r.count)}</b></div>
+            <div class="stat-row"><span>Fat.</span><b>${fmtBRL(r.fat)}</b></div>
+            <div class="stat-row"><span>Frete</span><b>${fmtBRL(r.frete)}</b></div>
+            <div class="stat-row"><span>% Frete</span><b style="color:var(--warn)">${pctFrete(r.fat,r.frete)}</b></div>
+          </div>`).join('')}
+      </div>
     </div>
 
     <div class="section">
@@ -754,6 +813,7 @@ function tplPorMes(){
           <div class="top"><span class="name">${esc(s.mes)}</span><span class="chip">${fmtNum(s.count)} NFs</span></div>
           <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Faturamento</span><b style="color:var(--text)">${fmtBRL(s.fat)}</b></div>
           <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Frete</span><b style="color:var(--text)">${fmtBRL(s.frete)}</b></div>
+          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>% Frete</span><b style="color:var(--warn)">${pctFrete(s.fat,s.frete)}</b></div>
           <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Pendentes</span><b style="color:var(--text)">${fmtNum(s.pend)}</b></div>
         </div>`).join('')}
     </div>
@@ -767,10 +827,7 @@ function selectMes(m){ state.mes.selected = (state.mes.selected===m) ? null : m;
 ============================================================ */
 function tplRegiao(){
   const sel = state.regiao.selected;
-  const summary = REGIOES.map(r=>{
-    const rows = state.data.filter(x=>x.regiao===r);
-    return { regiao:r, count:rows.length, fat: rows.reduce((s,x)=>s+(x.fat||0),0), frete: rows.reduce((s,x)=>s+(x.frete||0),0), pend: rows.filter(x=>x.status==='⚠ Preencher').length };
-  });
+  const summary = groupByRegiao(state.data);
   let detail = '';
   if(sel){
     const rows = withIdx(state.data).filter(r=>r.regiao===sel);
@@ -785,13 +842,15 @@ function tplRegiao(){
   return `
     <h1 class="page-title">Filtro por Região</h1>
     <p class="page-sub">Clique em uma região para ver o detalhamento.</p>
-    <div class="grid grid-5 section">
+    <div class="grid grid-3 section">
       ${summary.map(s=>`
         <div class="card pickcard ${sel===s.regiao?'selected':''}" onclick="selectRegiao('${s.regiao}')">
           <div class="top"><span class="name">${esc(s.regiao)}</span></div>
-          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>NFs</span><b style="color:var(--text)">${fmtNum(s.count)}</b></div>
-          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Fat.</span><b style="color:var(--text)">${fmtBRL(s.fat)}</b></div>
-          <div class="row" style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>Pendentes</span><b style="color:var(--text)">${fmtNum(s.pend)}</b></div>
+          <div class="stat-row"><span>NFs</span><b>${fmtNum(s.count)}</b></div>
+          <div class="stat-row"><span>Faturamento</span><b>${fmtBRL(s.fat)}</b></div>
+          <div class="stat-row"><span>Frete</span><b>${fmtBRL(s.frete)}</b></div>
+          <div class="stat-row"><span>% Frete</span><b style="color:var(--warn)">${pctFrete(s.fat,s.frete)}</b></div>
+          <div class="stat-row"><span>Pendentes</span><b>${fmtNum(s.pend)}</b></div>
         </div>`).join('')}
     </div>
     ${detail}
