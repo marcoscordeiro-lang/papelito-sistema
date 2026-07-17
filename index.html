@@ -425,7 +425,7 @@ function tplUpload(){
   const loaded = state.data.length>0;
   return `
     <h1 class="page-title">Importar Master de Pendências</h1>
-    <p class="page-sub">Arraste qualquer um dos arquivos (Cliente Final ou Fábrica) — o sistema identifica sozinho qual é qual.</p>
+    <p class="page-sub">Arraste qualquer um dos arquivos (Cliente Final ou Fábrica) — o sistema identifica sozinho qual é qual, atualiza as NFs que já existem e adiciona as novas. Os dados ficam salvos neste navegador.</p>
     <div class="upload-zone" id="dropzone" ondragover="event.preventDefault();this.classList.add('drag')"
       ondragleave="this.classList.remove('drag')"
       ondrop="handleDropAny(event, 'uploadMsg')">
@@ -479,6 +479,35 @@ function handleFileAny(file, msgId){
   };
   reader.readAsArrayBuffer(file);
 }
+/* ============================================================
+   PERSISTÊNCIA (localStorage) + MERGE (upsert por NF, nunca exclui)
+============================================================ */
+const STORAGE_KEY_CLIENTE = 'papelito_cliente_data_v1';
+const STORAGE_KEY_FABRICA = 'papelito_fabrica_data_v1';
+
+function saveToStorage(key, data){
+  try{ localStorage.setItem(key, JSON.stringify(data)); }catch(err){ console.error('Erro ao salvar no navegador:', err); }
+}
+function loadFromStorage(key){
+  try{
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }catch(err){ console.error('Erro ao carregar do navegador:', err); return null; }
+}
+/* Faz upsert: NF existente é atualizada, NF nova é adicionada, NF ausente no arquivo novo
+   NUNCA é removida (pode ser um arquivo complementar/parcial, não uma lista completa). */
+function mergeByKey(existing, incoming, keyFn){
+  const map = new Map();
+  existing.forEach(item => map.set(keyFn(item), item));
+  let added=0, updated=0;
+  incoming.forEach(item => {
+    const k = keyFn(item);
+    if(map.has(k)) updated++; else added++;
+    map.set(k, item);
+  });
+  return { merged: Array.from(map.values()), added, updated };
+}
+
 function carregarArquivoCliente(sheet, headerRowIdx, msg){
   const rows = XLSX.utils.sheet_to_json(sheet, {range:headerRowIdx, defval:null});
   const parsed = rows.filter(r => r['Nº NF']!==null && r['Nº NF']!==undefined && r['Nº NF']!=='').map(r=>({
@@ -504,9 +533,11 @@ function carregarArquivoCliente(sheet, headerRowIdx, msg){
   const totalBruto = parsed.length;
   const dataFiltrada = parsed.filter(r => ALLOWED_TIPOS.includes(r.tipo));
   const excluidos = totalBruto - dataFiltrada.length;
-  state.data = dataFiltrada;
+  const { merged, added, updated } = mergeByKey(state.data, dataFiltrada, r=>`${r.nf}|${r.mes}|${r.parceiro}`);
+  state.data = merged;
+  saveToStorage(STORAGE_KEY_CLIENTE, state.data);
   resetFilters();
-  if(msg()) msg().innerHTML = `<span style="color:var(--ok)">Reconhecido: base Cliente Final. ${dataFiltrada.length} NFs carregadas!</span> <span style="color:var(--muted)">(${excluidos} registros de Transferência/Devolução foram desconsiderados — só entram Venda e Bonificação)</span>`;
+  if(msg()) msg().innerHTML = `<span style="color:var(--ok)">Reconhecido: base Cliente Final. ${added} NFs novas, ${updated} atualizadas.</span> <span style="color:var(--muted)">Total agora: ${state.data.length} NFs. (${excluidos} registros de Transferência/Devolução foram desconsiderados — só entram Venda e Bonificação)</span>`;
   state.mode = 'cliente';
   renderNav();
   navigate('dashboard');
@@ -520,11 +551,13 @@ function carregarArquivoFabrica(rawRows, msg){
     if(msg()) msg().innerHTML = '<span style="color:var(--danger)">Nenhuma entrega com Valor de Frete encontrada. Verifique o arquivo.</span>';
     return;
   }
-  state.fabrica.data = validas;
+  const { merged, added, updated } = mergeByKey(state.fabrica.data, validas, e=>`${e.nf}|${e.mes}`);
+  state.fabrica.data = merged;
+  saveToStorage(STORAGE_KEY_FABRICA, state.fabrica.data);
   state.fabrica.master = { search:'', mes:'', transportadora:'', page:1, pageSize:25 };
   state.fabrica.entregaSelecionada = null;
   state.fabrica.mes = { selected:null };
-  if(msg()) msg().innerHTML = `<span style="color:var(--ok)">Reconhecido: base Fábrica. ${validas.length} entregas carregadas!</span> <span style="color:var(--muted)">(${semFrete} entregas antigas sem Frete e ${transferencias} de Transferência foram desconsideradas)</span>`;
+  if(msg()) msg().innerHTML = `<span style="color:var(--ok)">Reconhecido: base Fábrica. ${added} entregas novas, ${updated} atualizadas.</span> <span style="color:var(--muted)">Total agora: ${state.fabrica.data.length} entregas. (${semFrete} entregas antigas sem Frete e ${transferencias} de Transferência foram desconsideradas)</span>`;
   state.mode = 'fabrica';
   renderNav();
   navigate('dashboardFabrica');
@@ -1141,7 +1174,7 @@ function tplUploadFabrica(){
   const loaded = state.fabrica.data.length>0;
   return `
     <h1 class="page-title">Importar Entregas entre Empresas (Fábrica → RCS ES)</h1>
-    <p class="page-sub">Arraste qualquer um dos arquivos (Cliente Final ou Fábrica) — o sistema identifica sozinho qual é qual. Só entram entregas de 2026 com Frete preenchido.</p>
+    <p class="page-sub">Arraste qualquer um dos arquivos (Cliente Final ou Fábrica) — o sistema identifica sozinho qual é qual, atualiza as entregas que já existem e adiciona as novas. Só entram entregas de 2026 com Frete preenchido. Os dados ficam salvos neste navegador.</p>
     <div class="upload-zone" id="dropzoneFabrica" ondragover="event.preventDefault();this.classList.add('drag')"
       ondragleave="this.classList.remove('drag')"
       ondrop="handleDropAny(event, 'uploadMsgFabrica')">
@@ -1390,6 +1423,16 @@ function openModalFabrica(idx){
 /* ============================================================
    INIT
 ============================================================ */
+(function initFromStorage(){
+  const savedCliente = loadFromStorage(STORAGE_KEY_CLIENTE);
+  const savedFabrica = loadFromStorage(STORAGE_KEY_FABRICA);
+  if(savedCliente && savedCliente.length) state.data = savedCliente;
+  if(savedFabrica && savedFabrica.length) state.fabrica.data = savedFabrica;
+  if(state.data.length) state.screen = 'dashboard';
+  if(state.fabrica.data.length) state.fabrica.screen = 'dashboardFabrica';
+  if(state.data.length) state.mode = 'cliente';
+  else if(state.fabrica.data.length) state.mode = 'fabrica';
+})();
 renderNav();
 renderContent();
 </script>
